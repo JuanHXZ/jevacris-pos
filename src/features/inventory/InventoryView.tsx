@@ -17,7 +17,7 @@ export const InventoryView: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
-  const products = useLiveQuery(() => db.products.where('isActive').equals(1).toArray()) || [];
+  const products = useLiveQuery(() => db.products.filter(p => p.isActive !== false).toArray()) || [];
 
   // Auto-seleccionar el primer producto si no hay selección activa
   useEffect(() => {

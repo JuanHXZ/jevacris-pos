@@ -26,10 +26,9 @@ export const db = new JevacrisDatabase();
 
 // Semilla inicial de datos para tienda de productos de aseo JEVACRIS
 export async function seedInitialDataIfNeeded(): Promise<void> {
-  const count = await db.categories.count();
-  if (count > 0) return;
-
   const now = new Date().toISOString();
+  const categoriesCount = await db.categories.count();
+  const productsCount = await db.products.count();
 
   // Categorías base
   const catAseoId = 'cat-aseo-hogar';
@@ -37,7 +36,8 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
   const catDesinfeccionId = 'cat-desinfeccion';
   const catServiciosId = 'cat-servicios-recargas';
 
-  await db.categories.bulkAdd([
+  if (categoriesCount === 0) {
+    await db.categories.bulkAdd([
     {
       id: catAseoId,
       name: 'Aseo Hogar',
@@ -71,11 +71,13 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
       synced: false
     }
   ]);
+  }
 
   // Productos iniciales de prueba basados en el levantamiento de requisitos
-  await db.products.bulkAdd([
-    {
-      id: 'prod-jabon-rey',
+  if (productsCount === 0) {
+    await db.products.bulkAdd([
+      {
+        id: 'prod-jabon-rey',
       name: 'Jabón Rey 300g (Barra)',
       categoryId: catLavanderiaId,
       type: 'physical',
@@ -203,4 +205,5 @@ export async function seedInitialDataIfNeeded(): Promise<void> {
       synced: false
     }
   ]);
+  }
 }

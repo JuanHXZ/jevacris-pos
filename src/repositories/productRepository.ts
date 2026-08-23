@@ -3,7 +3,7 @@ import type { Product, Category } from '../types';
 
 export const productRepository = {
   async getAll(): Promise<Product[]> {
-    return await db.products.where('isActive').equals(1).toArray();
+    return await db.products.filter(p => p.isActive !== false).toArray();
   },
 
   async getById(id: string): Promise<Product | undefined> {

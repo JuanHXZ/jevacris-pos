@@ -1,13 +1,21 @@
 import { db } from '../db';
 import type { DailySummary, ExternalEarning } from '../types';
 
+export interface WeeklyDayData {
+  dayName: string;
+  shortDay: string;
+  dateStr: string;
+  totalSales: number;
+  isCurrentDay: boolean;
+}
+
 export const reportsRepository = {
   async getDailySummary(dateString?: string): Promise<DailySummary> {
     // Formato YYYY-MM-DD
     const targetDate = dateString || new Date().toISOString().split('T')[0];
 
     const allSales = await db.sales.toArray();
-    const todaySales = allSales.filter(s => s.saleDate.startsWith(targetDate));
+    const todaySales = allSales.filter((s) => s.saleDate.startsWith(targetDate));
 
     let cashSales = 0;
     let transferSales = 0;
@@ -23,17 +31,17 @@ export const reportsRepository = {
     }
 
     // Calcular ganancia solo de productos físicos
-    const todaySaleIds = new Set(todaySales.map(s => s.id));
+    const todaySaleIds = new Set(todaySales.map((s) => s.id));
     const allSaleItems = await db.saleItems.toArray();
     const todayPhysicalItems = allSaleItems.filter(
-      item => todaySaleIds.has(item.saleId) && item.productType === 'physical'
+      (item) => todaySaleIds.has(item.saleId) && item.productType === 'physical'
     );
 
     const physicalProfit = todayPhysicalItems.reduce((sum, item) => sum + item.profit, 0);
 
     // Ganancias de plataformas externas
     const allExternal = await db.externalEarnings.toArray();
-    const todayExternal = allExternal.filter(e => e.earningDate === targetDate);
+    const todayExternal = allExternal.filter((e) => e.earningDate === targetDate);
     const externalEarnings = todayExternal.reduce((sum, e) => sum + e.amount, 0);
 
     return {
@@ -45,6 +53,52 @@ export const reportsRepository = {
       externalEarnings,
       totalProfit: physicalProfit + externalEarnings
     };
+  },
+
+  async getYesterdaySales(targetDateStr?: string): Promise<number> {
+    const today = targetDateStr ? new Date(targetDateStr + 'T12:00:00') : new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const allSales = await db.sales.toArray();
+    const yesterdaySales = allSales.filter((s) => s.saleDate.startsWith(yesterdayStr));
+    return yesterdaySales.reduce((sum, s) => sum + s.totalAmount, 0);
+  },
+
+  async getWeeklySalesData(referenceDate?: string): Promise<WeeklyDayData[]> {
+    const ref = referenceDate ? new Date(referenceDate + 'T12:00:00') : new Date();
+    const currentDayOfWeek = ref.getDay(); // 0 is Sunday, 1 is Monday...
+    // Calculate Monday of this week
+    const mondayOffset = currentDayOfWeek === 0 ? -6 : 1 - currentDayOfWeek;
+    const monday = new Date(ref);
+    monday.setDate(ref.getDate() + mondayOffset);
+
+    const allSales = await db.sales.toArray();
+    const days: WeeklyDayData[] = [];
+    const dayNames = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM'];
+    const fullDayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dateStr = d.toISOString().split('T')[0];
+
+      const daySales = allSales.filter((s) => s.saleDate.startsWith(dateStr));
+      const totalSales = daySales.reduce((sum, s) => sum + s.totalAmount, 0);
+
+      days.push({
+        dayName: fullDayNames[i],
+        shortDay: dayNames[i],
+        dateStr,
+        totalSales,
+        isCurrentDay: dateStr === todayStr
+      });
+    }
+
+    return days;
   },
 
   async addExternalEarning(params: {

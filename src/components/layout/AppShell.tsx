@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShoppingCart, Package, ArrowDownToLine, BarChart3, Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { useSync } from '../../hooks/useSync';
+import { SideNavBar } from './SideNavBar';
 
 export type TabId = 'pos' | 'inventory' | 'stock' | 'reports';
 
@@ -66,116 +67,55 @@ export const AppShell: React.FC<AppShellProps> = ({
   const badge = getSyncBadge();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
-      {/* Top Header */}
-      <header
-        style={{
-          height: '60px',
-          backgroundColor: 'var(--bg-surface)',
-          borderBottom: '1px solid var(--border-subtle)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 20px',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '34px',
-              height: '34px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--brand-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-              fontSize: '18px',
-              color: '#ffffff',
-              boxShadow: 'var(--shadow-glow-brand)'
-            }}
-          >
-            J
-          </div>
-          <div>
-            <h1 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--text-primary)', margin: 0 }}>
-              JEVACRIS <span style={{ color: 'var(--color-success)', fontWeight: 600, fontSize: '14px' }}>POS</span>
-            </h1>
-          </div>
-        </div>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
+      {/* Desktop SideNavBar Component from Figma */}
+      <SideNavBar
+        activeTab={activeTab}
+        onTabChange={onTabChange}
+        onNewSale={() => onTabChange('pos')}
+      />
 
-        {/* Sync Status Button & Indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button
-            onClick={() => triggerSync()}
-            disabled={isSyncing}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: '12px',
-              fontWeight: 600,
-              backgroundColor: badge.bg,
-              color: badge.color,
-              border: `1px solid ${badge.border}`,
-              cursor: 'pointer'
-            }}
-            title="Click para sincronizar ahora con Supabase"
-          >
-            {badge.icon}
-            <span>{badge.label}</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Desktop Sidebar Navigation */}
-        <aside
+      {/* Main Content Area + Top Header */}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        {/* Top Header */}
+        <header
           style={{
-            width: '240px',
-            backgroundColor: 'var(--bg-surface)',
-            borderRight: '1px solid var(--border-subtle)',
-            padding: '16px 12px',
+            height: '64px',
+            backgroundColor: 'transparent',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            padding: '0 32px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 100
           }}
-          className="desktop-sidebar"
         >
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onTabChange(item.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  padding: '14px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  fontWeight: 600,
-                  fontSize: '15px',
-                  color: isActive ? '#ffffff' : 'var(--text-secondary)',
-                  backgroundColor: isActive ? 'var(--brand-primary)' : 'transparent',
-                  transition: 'all 0.15s ease',
-                  textAlign: 'left',
-                  width: '100%'
-                }}
-              >
-                <Icon size={20} />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
-        </aside>
+          {/* Sync Status Button & Indicator */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              onClick={() => triggerSync()}
+              disabled={isSyncing}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: badge.bg,
+                color: badge.color,
+                border: `1px solid ${badge.border}`,
+                cursor: 'pointer'
+              }}
+              title="Click para sincronizar ahora con Supabase"
+            >
+              {badge.icon}
+              <span>{badge.label}</span>
+            </button>
+          </div>
+        </header>
 
         {/* Dynamic Page Content */}
         <main

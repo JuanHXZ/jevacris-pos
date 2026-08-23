@@ -1,5 +1,5 @@
-import React from 'react';
-import { Search, List, LayoutGrid, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, List, LayoutGrid, Sparkles, Check } from 'lucide-react';
 import type { Product, Category } from '../../../types';
 
 interface InventoryTableProps {
@@ -27,6 +27,7 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   viewMode,
   onViewModeChange
 }) => {
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const categoryMap = new Map<string, string>();
   categories.forEach(c => categoryMap.set(c.id, c.name));
 
@@ -41,93 +42,104 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
   return (
     <div
       style={{
-        backgroundColor: 'var(--surface-container-lowest)',
-        borderRadius: 'var(--radius-md)',
+        backgroundColor: '#ffffff',
+        borderRadius: '36px',
         boxShadow: 'var(--shadow-editorial-subtle)',
-        border: '1px solid var(--surface-container-high)',
+        border: '1px solid #ece6f1',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column'
       }}
     >
-      {/* Table Header Controls */}
+      {/* Table Header Controls (Figma node: 1:22) */}
       <div
         style={{
           padding: '20px 24px',
-          borderBottom: '1px solid var(--surface-container-high)',
+          borderBottom: '1px solid #ece6f1',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: '12px',
-          backgroundColor: 'rgba(248, 241, 253, 0.5)',
-          backdropFilter: 'blur(8px)'
+          gap: '16px',
+          backgroundColor: '#ffffff',
+          position: 'relative'
         }}
       >
-        {/* Search Input */}
-        <div style={{ position: 'relative', width: '280px' }}>
+        {/* Search Input (Píldora limpia idéntica a la imagen 2) */}
+        <div
+          style={{
+            position: 'relative',
+            width: '260px',
+            height: '42px',
+            backgroundColor: '#f2ecf7',
+            borderRadius: '9999px',
+            display: 'flex',
+            alignItems: 'center',
+            boxSizing: 'border-box',
+            transition: 'background-color 0.2s ease, box-shadow 0.2s ease'
+          }}
+        >
           <Search
-            size={18}
+            size={14}
+            strokeWidth={2.2}
+            color="#7e747f"
             style={{
               position: 'absolute',
-              left: '14px',
+              left: '16px',
               top: '50%',
               transform: 'translateY(-50%)',
-              color: 'var(--on-surface-variant)'
+              pointerEvents: 'none'
             }}
           />
           <input
             type="text"
             placeholder="Buscar productos..."
             value={searchTerm}
-            onChange={e => onSearchChange(e.target.value)}
+            onChange={(e) => onSearchChange(e.target.value)}
             style={{
               width: '100%',
-              paddingLeft: '42px',
-              paddingRight: '14px',
-              paddingTop: '10px',
-              paddingBottom: '10px',
-              fontSize: '14px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--surface-container-highest)',
-              borderBottom: '2px solid transparent'
+              height: '100%',
+              paddingLeft: '44px',
+              paddingRight: '16px',
+              fontSize: '13.5px',
+              fontWeight: 400,
+              color: '#1d1a22',
+              backgroundColor: 'transparent',
+              border: 'none',
+              outline: 'none',
+              fontFamily: 'var(--font-sans)',
+              boxSizing: 'border-box',
+              borderRadius: '9999px'
+            }}
+            onFocus={(e) => {
+              const parent = e.currentTarget.parentElement;
+              if (parent) {
+                parent.style.backgroundColor = '#ece6f1';
+                parent.style.boxShadow = '0 0 0 2px rgba(49, 3, 68, 0.1)';
+              }
+            }}
+            onBlur={(e) => {
+              const parent = e.currentTarget.parentElement;
+              if (parent) {
+                parent.style.backgroundColor = '#f2ecf7';
+                parent.style.boxShadow = 'none';
+              }
             }}
           />
         </div>
 
-        {/* View Mode & Category Filter Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Category Dropdown */}
-          <select
-            value={categoryFilter}
-            onChange={e => onCategoryFilterChange(e.target.value)}
-            style={{
-              padding: '8px 14px',
-              fontSize: '13px',
-              fontWeight: 600,
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: 'var(--surface-container-low)',
-              border: '1px solid var(--outline-variant)',
-              color: 'var(--on-surface-variant)'
-            }}
-          >
-            <option value="all">Todas las Categorías</option>
-            {categories.map(c => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-
-          {/* Toggle List / Grid */}
+        {/* Right Controls: View Mode & Filter Button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
+          {/* View Mode Switcher Capsule */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: 'var(--surface-container-low)',
-              borderRadius: 'var(--radius-full)',
+              backgroundColor: '#f8f1fd',
+              borderRadius: '9999px',
               padding: '3px',
-              border: '1px solid var(--outline-variant)'
+              border: '1px solid rgba(207, 195, 207, 0.3)',
+              gap: '2px'
             }}
           >
             <button
@@ -135,36 +147,174 @@ export const InventoryTable: React.FC<InventoryTableProps> = ({
               style={{
                 width: '32px',
                 height: '32px',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: '9999px',
+                border: 'none',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: viewMode === 'list' ? 'var(--primary-container)' : 'transparent',
-                color: viewMode === 'list' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-                transition: 'all 0.2s ease'
+                backgroundColor: viewMode === 'list' ? '#310344' : 'transparent',
+                color: viewMode === 'list' ? '#ffffff' : '#310344',
+                boxShadow: viewMode === 'list' ? '0px 2px 4px rgba(49, 3, 68, 0.15)' : 'none',
+                transition: 'all 0.15s ease'
               }}
-              title="Vista de lista"
+              title="Vista de tabla / lista"
             >
-              <List size={16} />
+              <List size={15} strokeWidth={2.2} />
             </button>
+
             <button
               onClick={() => onViewModeChange('grid')}
               style={{
                 width: '32px',
                 height: '32px',
-                borderRadius: 'var(--radius-full)',
+                borderRadius: '9999px',
+                border: 'none',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: viewMode === 'grid' ? 'var(--primary-container)' : 'transparent',
-                color: viewMode === 'grid' ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
-                transition: 'all 0.2s ease'
+                backgroundColor: viewMode === 'grid' ? '#310344' : 'transparent',
+                color: viewMode === 'grid' ? '#ffffff' : '#310344',
+                boxShadow: viewMode === 'grid' ? '0px 2px 4px rgba(49, 3, 68, 0.15)' : 'none',
+                transition: 'all 0.15s ease'
               }}
               title="Vista de cuadrícula"
             >
-              <LayoutGrid size={16} />
+              <LayoutGrid size={14} strokeWidth={2.2} />
             </button>
           </div>
+
+          {/* Filter Button (Idéntico a la imagen 2: "Filtrar" con icono de embudo) */}
+          <button
+            onClick={() => setIsFilterOpen(!isFilterOpen)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '9999px',
+              border: categoryFilter !== 'all' ? '1px solid #310344' : '1px solid #cfc3cf',
+              backgroundColor: categoryFilter !== 'all' ? '#f6d9fb' : '#ffffff',
+              color: categoryFilter !== 'all' ? '#27142d' : '#1d1a22',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              height: '38px',
+              boxSizing: 'border-box'
+            }}
+          >
+            {/* Icono de embudo de 3 líneas como en la imagen */}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ color: categoryFilter !== 'all' ? '#27142d' : '#4d444e' }}
+            >
+              <path
+                d="M2 3.5H14M4 8H12M6.5 12.5H9.5"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span
+              style={{
+                fontSize: '13px',
+                fontWeight: 600,
+                color: categoryFilter !== 'all' ? '#27142d' : '#1d1a22',
+                fontFamily: 'var(--font-sans)'
+              }}
+            >
+              {categoryFilter !== 'all' ? (categoryMap.get(categoryFilter) || 'Filtrado') : 'Filtrar'}
+            </span>
+          </button>
+
+          {/* Floating Category Dropdown Menu */}
+          {isFilterOpen && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                right: 0,
+                zIndex: 100,
+                backgroundColor: '#ffffff',
+                borderRadius: '24px',
+                padding: '12px',
+                boxShadow: '0px 12px 32px rgba(49, 3, 68, 0.15)',
+                border: '1px solid #e6e0eb',
+                minWidth: '220px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px'
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#7e747f',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  padding: '6px 12px'
+                }}
+              >
+                Filtrar por Categoría
+              </div>
+
+              <button
+                onClick={() => {
+                  onCategoryFilterChange('all');
+                  setIsFilterOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  borderRadius: '16px',
+                  border: 'none',
+                  backgroundColor: categoryFilter === 'all' ? '#f8f1fd' : 'transparent',
+                  color: categoryFilter === 'all' ? '#310344' : '#1d1a22',
+                  fontWeight: categoryFilter === 'all' ? 700 : 500,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  textAlign: 'left'
+                }}
+              >
+                <span>Todas las categorías</span>
+                {categoryFilter === 'all' && <Check size={14} color="#310344" />}
+              </button>
+
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => {
+                    onCategoryFilterChange(c.id);
+                    setIsFilterOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '8px 12px',
+                    borderRadius: '16px',
+                    border: 'none',
+                    backgroundColor: categoryFilter === c.id ? '#f8f1fd' : 'transparent',
+                    color: categoryFilter === c.id ? '#310344' : '#1d1a22',
+                    fontWeight: categoryFilter === c.id ? 700 : 500,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    textAlign: 'left'
+                  }}
+                >
+                  <span>{c.name}</span>
+                  {categoryFilter === c.id && <Check size={14} color="#310344" />}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { DollarSign, Banknote, CreditCard, TrendingUp, AlertTriangle, Plus, Download, Smartphone } from 'lucide-react';
+import {
+  Calendar,
+  Download,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Sparkles,
+  Package,
+  Plus
+} from 'lucide-react';
 import { db } from '../../db';
-import { reportsRepository } from '../../repositories/reportsRepository';
-import { Button } from '../../components/ui/Button';
+import { reportsRepository, type WeeklyDayData } from '../../repositories/reportsRepository';
 import { Modal } from '../../components/ui/Modal';
-import { Badge } from '../../components/ui/Badge';
+import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/currency';
 import type { DailySummary } from '../../types';
 
 export const ReportsView: React.FC = () => {
@@ -21,50 +30,98 @@ export const ReportsView: React.FC = () => {
     externalEarnings: 0,
     totalProfit: 0
   });
+  const [yesterdaySales, setYesterdaySales] = useState<number>(0);
+  const [weeklyData, setWeeklyData] = useState<WeeklyDayData[]>([]);
+  const [isExternalModalOpen, setIsExternalModalOpen] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Formulario de Ganancia Externa
   const [platformName, setPlatformName] = useState('Recargas Móviles');
-  const [earningAmount, setEarningAmount] = useState<number>(0);
+  const [earningAmountRaw, setEarningAmountRaw] = useState<string>('');
   const [earningNotes, setEarningNotes] = useState('');
 
-  // Live queries para actualizar en tiempo real si ocurren ventas
+  // Live queries desde IndexedDB
   const salesCount = useLiveQuery(() => db.sales.count());
   const earningsCount = useLiveQuery(() => db.externalEarnings.count());
-  const externalEarningsList = useLiveQuery(() => 
-    db.externalEarnings.where('earningDate').equals(selectedDate).toArray()
-  , [selectedDate]) || [];
-
-  const lowStockProducts = useLiveQuery(() => 
-    db.products.filter(p => p.isActive && p.type === 'physical' && p.currentStock <= p.minStockAlert).toArray()
+  const lowStockProducts = useLiveQuery(() =>
+    db.products
+      .filter((p) => p.isActive !== false && p.type === 'physical' && p.currentStock <= p.minStockAlert)
+      .toArray()
   ) || [];
 
+  const categories = useLiveQuery(() => db.categories.toArray()) || [];
+
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+
   useEffect(() => {
-    const loadSummary = async () => {
-      const data = await reportsRepository.getDailySummary(selectedDate);
-      setSummary(data);
+    const loadReportData = async () => {
+      const dailyData = await reportsRepository.getDailySummary(selectedDate);
+      const prevSales = await reportsRepository.getYesterdaySales(selectedDate);
+      const weekTrend = await reportsRepository.getWeeklySalesData(selectedDate);
+
+      setSummary(dailyData);
+      setYesterdaySales(prevSales);
+      setWeeklyData(weekTrend);
     };
-    loadSummary();
+
+    loadReportData();
   }, [selectedDate, salesCount, earningsCount]);
+
+  // Formato de fecha editorial: "Jueves, 24 de Octubre de 2023"
+  const formatEditorialDate = (dateStr: string) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    const formatted = d.toLocaleDateString('es-CO', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  };
+
+  // Cálculo de variación porcentual vs ayer
+  const calculatePercentageVsYesterday = () => {
+    if (yesterdaySales === 0) {
+      return summary.totalSales > 0 ? '+100%' : '0%';
+    }
+    const diff = ((summary.totalSales - yesterdaySales) / yesterdaySales) * 100;
+    const sign = diff >= 0 ? '+' : '';
+    return `${sign}${diff.toFixed(1)}% vs ayer`;
+  };
+
+  const isGrowthPositive = summary.totalSales >= yesterdaySales;
+
+  // Formato compacto para números grandes (ej. $4.2M o $ 420.000)
+  const formatCompactCOP = (val: number) => {
+    if (val >= 1000000) {
+      return `$${(val / 1000000).toFixed(1)}M`;
+    }
+    return formatCOP(val);
+  };
+
+  // Altura máxima del gráfico semanal
+  const maxWeeklySale = Math.max(...weeklyData.map((d) => d.totalSales), 1);
 
   const handleAddExternal = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!platformName || earningAmount <= 0) return;
+    const amount = parseCOPInput(earningAmountRaw);
+    if (!platformName || amount <= 0) return;
 
     await reportsRepository.addExternalEarning({
       earningDate: selectedDate,
       platformName,
-      amount: earningAmount,
+      amount,
       notes: earningNotes.trim() || undefined
     });
 
-    setIsModalOpen(false);
-    setEarningAmount(0);
+    setIsExternalModalOpen(false);
+    setEarningAmountRaw('');
     setEarningNotes('');
   };
 
   const handleExportBackup = async () => {
-    const categories = await db.categories.toArray();
-    const products = await db.products.toArray();
+    const cats = await db.categories.toArray();
+    const prods = await db.products.toArray();
     const sales = await db.sales.toArray();
     const saleItems = await db.saleItems.toArray();
     const stockEntries = await db.stockEntries.toArray();
@@ -72,263 +129,963 @@ export const ReportsView: React.FC = () => {
 
     const backup = {
       version: 1,
+      appName: 'JEVACRIS POS & INVENTORY',
       exportedAt: new Date().toISOString(),
-      data: { categories, products, sales, saleItems, stockEntries, externalEarnings }
+      data: { categories: cats, products: prods, sales, saleItems, stockEntries, externalEarnings }
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `jevacris-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `jevacris-reporte-caja-${selectedDate}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const formatCOP = (val: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      maximumFractionDigits: 0
-    }).format(val);
-  };
+  // Producto más crítico para la recomendación inteligente
+  const mostCriticalProduct = [...lowStockProducts].sort(
+    (a, b) => a.currentStock / (a.minStockAlert || 1) - b.currentStock / (b.minStockAlert || 1)
+  )[0];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Encabezado y Selector de Fecha */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h2 style={{ fontSize: '24px', fontWeight: 800 }}>Caja, Ganancias & Reportes</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-            Consolidado diario de ventas, medios de pago y utilidades totales
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '40px',
+        position: 'relative'
+      }}
+      className="reports-page-container"
+    >
+      {/* ========================================================================= */}
+      {/* Header: Resumen del Día & Botones de Acción (Figma 1:708)                 */}
+      {/* ========================================================================= */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: '48px',
+              fontWeight: 700,
+              color: '#1d1a22',
+              letterSpacing: '-0.96px',
+              lineHeight: 1.1,
+              fontFamily: 'var(--font-sans)'
+            }}
+          >
+            Resumen del Día
+          </h1>
+          <p
+            style={{
+              margin: 0,
+              fontSize: '18px',
+              color: '#4d444e',
+              fontFamily: 'var(--font-sans)'
+            }}
+          >
+            {formatEditorialDate(selectedDate)}
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
-            style={{ height: '44px', fontWeight: 600 }}
-          />
-          <Button variant="secondary" size="sm" leftIcon={<Download size={16} />} onClick={handleExportBackup}>
-            Copia de Seguridad
-          </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          {/* Botón Selector de Fecha / Hoy */}
+          <button
+            onClick={() => setIsDatePickerOpen(true)}
+            style={{
+              backgroundColor: '#f8f1fd',
+              border: 'none',
+              borderRadius: '9999px',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              color: '#4d444e',
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '1.2px',
+              textTransform: 'uppercase',
+              transition: 'background-color 0.15s ease'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f2ecf7')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8f1fd')}
+          >
+            <Calendar size={14} color="#7a4c8c" />
+            <span>
+              {selectedDate === new Date().toISOString().split('T')[0] ? 'HOY' : selectedDate}
+            </span>
+          </button>
+
+          {/* Botón Ganancia Externa */}
+          <button
+            onClick={() => setIsExternalModalOpen(true)}
+            style={{
+              backgroundColor: '#f8f1fd',
+              border: '1px solid rgba(207, 195, 207, 0.4)',
+              borderRadius: '9999px',
+              padding: '12px 22px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              color: '#310344',
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '1.2px',
+              textTransform: 'uppercase'
+            }}
+          >
+            <Plus size={14} />
+            <span>GANANCIA EXT.</span>
+          </button>
+
+          {/* Botón Exportar */}
+          <button
+            onClick={handleExportBackup}
+            style={{
+              backgroundColor: '#fdf7ff',
+              border: '1px solid #cfc3cf',
+              borderRadius: '9999px',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+              color: '#1d1a22',
+              fontSize: '12px',
+              fontWeight: 700,
+              letterSpacing: '1.2px',
+              textTransform: 'uppercase',
+              boxShadow: '0 2px 6px rgba(49, 3, 68, 0.04)'
+            }}
+          >
+            <Download size={14} />
+            <span>EXPORTAR</span>
+          </button>
         </div>
       </div>
 
-      {/* Tarjetas de Métricas Principales (Grid) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        {/* Total Ventas */}
-        <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, textTransform: 'uppercase' }}>Ventas del Día</span>
-            <DollarSign size={20} color="var(--brand-primary)" />
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-            {formatCOP(summary.totalSales)}
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {summary.totalTransactions} transacciones registradas
-          </div>
-        </div>
+      {/* ========================================================================= */}
+      {/* Bento Grid 60% / 40% (Figma 1:723)                                        */}
+      {/* ========================================================================= */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1.4fr) minmax(360px, 1fr)',
+          gap: '32px',
+          alignItems: 'start'
+        }}
+        className="reports-bento-grid"
+      >
+        {/* ======================================================================= */}
+        {/* 60% Columna Izquierda: Tarjetas Bento & Gráfico Semanal                 */}
+        {/* ======================================================================= */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+          {/* Top Bento Cards */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1.15fr 1fr',
+              gap: '24px'
+            }}
+            className="reports-top-cards"
+          >
+            {/* Card 1: Ventas Totales (Prominente con Blob Lila) */}
+            <div
+              style={{
+                backgroundColor: '#fdf7ff',
+                borderRadius: '32px',
+                padding: '32px',
+                boxShadow: '24px 0px 48px rgba(49, 3, 68, 0.06)',
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                minHeight: '220px'
+              }}
+            >
+              {/* Blob Decorativo Difuso */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '-48px',
+                  right: '-48px',
+                  width: '192px',
+                  height: '192px',
+                  borderRadius: '50%',
+                  backgroundColor: '#f8d8ff',
+                  filter: 'blur(20px)',
+                  opacity: 0.3,
+                  pointerEvents: 'none'
+                }}
+              />
 
-        {/* Efectivo en Caja */}
-        <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, textTransform: 'uppercase' }}>Efectivo (Caja)</span>
-            <Banknote size={20} color="var(--color-success)" />
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-success)', fontFamily: 'var(--font-mono)' }}>
-            {formatCOP(summary.cashSales)}
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Dinero físico a cuadrar
-          </div>
-        </div>
+              {/* Título de la Métrica */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative', zIndex: 1 }}>
+                <DollarSign size={16} color="#7a4c8c" />
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#4d444e',
+                    letterSpacing: '1.2px',
+                    textTransform: 'uppercase',
+                    fontFamily: 'var(--font-sans)'
+                  }}
+                >
+                  VENTAS TOTALES
+                </span>
+              </div>
 
-        {/* Transferencias / Nequi */}
-        <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, textTransform: 'uppercase' }}>Transferencias (Nequi)</span>
-            <CreditCard size={20} color="var(--color-nequi)" />
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-nequi)', fontFamily: 'var(--font-mono)' }}>
-            {formatCOP(summary.transferSales)}
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Ingresos en cuenta digital
-          </div>
-        </div>
+              {/* Cifra Gigante */}
+              <div
+                style={{
+                  fontSize: '56px',
+                  fontWeight: 700,
+                  color: '#310344',
+                  letterSpacing: '-2.5px',
+                  lineHeight: 1.1,
+                  fontFamily: 'var(--font-sans)',
+                  margin: '12px 0',
+                  position: 'relative',
+                  zIndex: 1
+                }}
+              >
+                {formatCompactCOP(summary.totalSales)}
+              </div>
 
-        {/* Ganancia Total Consolidada */}
-        <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--color-success-border)', borderRadius: 'var(--radius-lg)', padding: '20px', boxShadow: 'var(--shadow-glow-success)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--color-success)', marginBottom: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase' }}>Ganancia Total Neta</span>
-            <TrendingUp size={20} />
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-success)', fontFamily: 'var(--font-mono)' }}>
-            {formatCOP(summary.totalProfit)}
-          </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Productos: {formatCOP(summary.physicalProfit)} | Ext: {formatCOP(summary.externalEarnings)}
-          </div>
-        </div>
-      </div>
-
-      {/* Sección 2 Columnas: Ganancias Externas y Alertas de Stock */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }} className="reports-columns">
-        {/* Ganancias de Plataformas Externas */}
-        <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-xl)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Smartphone size={20} color="var(--brand-primary)" />
-              <h3 style={{ fontSize: '17px', fontWeight: 700 }}>Ganancias de Plataformas Externas</h3>
+              {/* Tendencia vs Ayer */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  position: 'relative',
+                  zIndex: 1
+                }}
+              >
+                {isGrowthPositive ? (
+                  <TrendingUp size={16} color="#388e3c" />
+                ) : (
+                  <TrendingDown size={16} color="#ba1a1a" />
+                )}
+                <span
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: isGrowthPositive ? '#388e3c' : '#ba1a1a',
+                    fontFamily: 'var(--font-sans)'
+                  }}
+                >
+                  {calculatePercentageVsYesterday()}
+                </span>
+              </div>
             </div>
-            <Button size="sm" variant="primary" leftIcon={<Plus size={15} />} onClick={() => setIsModalOpen(true)}>
-              REGISTRAR
-            </Button>
-          </div>
 
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Ingresa las comisiones/utilidades que entregan las plataformas de recargas o corresponsal para sumarlas a la ganancia del día.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-            {externalEarningsList.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '14px' }}>
-                No hay ganancias externas registradas para esta fecha.
-              </div>
-            ) : (
-              externalEarningsList.map(item => (
-                <div
-                  key={item.id}
+            {/* Columna Derecha de Bento: Ganancia & Transacciones */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Card 2: Ganancia Estimada */}
+              <div
+                style={{
+                  backgroundColor: '#fdf7ff',
+                  borderRadius: '24px',
+                  padding: '24px',
+                  boxShadow: '16px 0px 16px rgba(49, 3, 68, 0.04)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <span
                   style={{
-                    backgroundColor: 'var(--bg-surface-raised)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#4d444e',
+                    letterSpacing: '1.2px',
+                    textTransform: 'uppercase'
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{item.platformName}</div>
-                    {item.notes && <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{item.notes}</div>}
-                  </div>
-                  <div style={{ fontWeight: 800, fontSize: '16px', color: 'var(--color-success)', fontFamily: 'var(--font-mono)' }}>
-                    +{formatCOP(item.amount)}
-                  </div>
+                  GANANCIA ESTIMADA
+                </span>
+                <div
+                  style={{
+                    fontSize: '32px',
+                    fontWeight: 600,
+                    color: '#1d1a22',
+                    fontFamily: 'var(--font-sans)',
+                    letterSpacing: '-0.8px'
+                  }}
+                >
+                  {formatCompactCOP(summary.totalProfit)}
                 </div>
-              ))
-            )}
+              </div>
+
+              {/* Card 3: Transacciones */}
+              <div
+                style={{
+                  backgroundColor: '#f8f1fd',
+                  borderRadius: '24px',
+                  padding: '24px',
+                  boxShadow: '8px 0px 8px rgba(49, 3, 68, 0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: '#4d444e',
+                    letterSpacing: '1.2px',
+                    textTransform: 'uppercase'
+                  }}
+                >
+                  TRANSACCIONES
+                </span>
+                <div
+                  style={{
+                    fontSize: '32px',
+                    fontWeight: 600,
+                    color: '#1d1a22',
+                    fontFamily: 'var(--font-sans)',
+                    letterSpacing: '-0.8px'
+                  }}
+                >
+                  {summary.totalTransactions}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Panel de Gráfico: Tendencia Semanal (Figma 1:752) */}
+          <div
+            style={{
+              backgroundColor: '#fdf7ff',
+              borderRadius: '40px',
+              padding: '32px',
+              boxShadow: '24px 0px 24px rgba(49, 3, 68, 0.05)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '32px'
+            }}
+          >
+            {/* Encabezado del Gráfico */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: '24px',
+                  fontWeight: 600,
+                  color: '#1d1a22',
+                  letterSpacing: '-0.4px',
+                  fontFamily: 'var(--font-sans)'
+                }}
+              >
+                Tendencia Semanal
+              </h3>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div
+                  style={{
+                    width: '8px',
+                    height: '8px',
+                    borderRadius: '50%',
+                    backgroundColor: '#310344'
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#4d444e',
+                    letterSpacing: '1.2px',
+                    textTransform: 'uppercase'
+                  }}
+                >
+                  INGRESOS
+                </span>
+              </div>
+            </div>
+
+            {/* Contenedor Visual de Barras */}
+            <div
+              style={{
+                height: '240px',
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'space-between',
+                paddingBottom: '36px',
+                borderBottom: '1px solid #e6e0eb'
+              }}
+            >
+              {/* Líneas Guía Horizontales */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  bottom: '36px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  pointerEvents: 'none'
+                }}
+              >
+                <div style={{ width: '100%', height: '1px', backgroundColor: '#f2ecf7' }} />
+                <div style={{ width: '100%', height: '1px', backgroundColor: '#f2ecf7' }} />
+                <div style={{ width: '100%', height: '1px', backgroundColor: '#f2ecf7' }} />
+              </div>
+
+              {/* 7 Barras (LUN, MAR, MIE, JUE, VIE, SAB, DOM) */}
+              {weeklyData.map((day) => {
+                const heightPercent = Math.max(12, Math.round((day.totalSales / maxWeeklySale) * 100));
+                const isSelected = day.isCurrentDay || day.dateStr === selectedDate;
+
+                return (
+                  <div
+                    key={day.dateStr}
+                    onClick={() => setSelectedDate(day.dateStr)}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      position: 'relative',
+                      cursor: 'pointer',
+                      zIndex: 2,
+                      width: '48px'
+                    }}
+                    title={`${day.dayName} (${day.dateStr}): ${formatCOP(day.totalSales)}`}
+                  >
+                    {/* Tooltip con Valor Flotante para el día activo */}
+                    {isSelected && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '-32px',
+                          backgroundColor: '#310344',
+                          color: '#ffffff',
+                          borderRadius: '16px',
+                          padding: '4px 10px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          letterSpacing: '0.05em',
+                          whiteSpace: 'nowrap',
+                          boxShadow: '0 4px 12px rgba(49, 3, 68, 0.25)'
+                        }}
+                      >
+                        {formatCompactCOP(day.totalSales)}
+                      </div>
+                    )}
+
+                    {/* Barra */}
+                    <div
+                      style={{
+                        width: '48px',
+                        height: `${(heightPercent * 160) / 100}px`,
+                        backgroundColor: isSelected ? '#310344' : '#ece6f1',
+                        borderTopLeftRadius: '48px',
+                        borderTopRightRadius: '48px',
+                        transition: 'all 0.2s ease',
+                        boxShadow: isSelected ? '0px 8px 16px rgba(49, 3, 68, 0.2)' : 'none'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) e.currentTarget.style.backgroundColor = '#d9bddf';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) e.currentTarget.style.backgroundColor = '#ece6f1';
+                      }}
+                    />
+
+                    {/* Etiqueta del Día */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '-28px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        letterSpacing: '1.2px',
+                        color: isSelected ? '#310344' : '#4d444e',
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      {day.shortDay}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Alertas de Stock Bajo / Agotado */}
-        <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-xl)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <AlertTriangle size={20} color="var(--color-warning)" />
-            <h3 style={{ fontSize: '17px', fontWeight: 700 }}>Productos que Requieren Compra</h3>
-            <Badge variant="warning">{lowStockProducts.length}</Badge>
+        {/* ======================================================================= */}
+        {/* 40% Columna Derecha: Alertas de Stock & Recomendaciones (Figma 1:792)   */}
+        {/* ======================================================================= */}
+        <div
+          style={{
+            backgroundColor: '#fdf7ff',
+            border: '1px solid #ffffff',
+            borderRadius: '32px',
+            padding: '32px',
+            boxShadow: '32px 0px 32px rgba(49, 3, 68, 0.08)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '28px'
+          }}
+        >
+          {/* Encabezado de Alertas */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  backgroundColor: '#f8f1fd',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ba1a1a'
+                }}
+              >
+                <AlertTriangle size={18} />
+              </div>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: '24px',
+                  fontWeight: 600,
+                  color: '#1d1a22',
+                  letterSpacing: '-0.4px',
+                  fontFamily: 'var(--font-sans)'
+                }}
+              >
+                Alertas de Stock
+              </h3>
+            </div>
+
+            <span
+              style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#010001',
+                letterSpacing: '1.2px',
+                textTransform: 'uppercase'
+              }}
+            >
+              {lowStockProducts.length} ÍTEMS
+            </span>
           </div>
 
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Productos físicos con existencias iguales o inferiores al umbral mínimo de alerta.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto', maxHeight: '280px' }}>
+          {/* Lista de Productos con Stock Bajo */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              maxHeight: '360px',
+              overflowY: 'auto'
+            }}
+          >
             {lowStockProducts.length === 0 ? (
-              <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-success)', fontSize: '14px' }}>
-                ✓ ¡Todo el inventario tiene existencias suficientes!
+              <div
+                style={{
+                  padding: '32px 20px',
+                  textAlign: 'center',
+                  backgroundColor: '#f8f1fd',
+                  borderRadius: '24px',
+                  color: '#4d444e'
+                }}
+              >
+                <Sparkles size={32} color="#7a4c8c" style={{ marginBottom: '8px' }} />
+                <div style={{ fontWeight: 600, fontSize: '15px' }}>¡Inventario en Nivel Óptimo!</div>
+                <div style={{ fontSize: '13px', marginTop: '4px', color: '#7e747f' }}>
+                  No hay productos con existencias por debajo del umbral de alerta.
+                </div>
               </div>
             ) : (
-              lowStockProducts.map(p => (
-                <div
-                  key={p.id}
-                  style={{
-                    backgroundColor: 'var(--bg-surface-raised)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{p.name}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Mínimo sugerido: {p.minStockAlert} {p.unit}s</div>
-                  </div>
-                  <Badge variant={p.currentStock <= 0 ? 'danger' : 'warning'}>
-                    Quedan: {p.currentStock} {p.unit}s
-                  </Badge>
-                </div>
-              ))
+              lowStockProducts.map((prod, idx) => {
+                const isCritical = prod.currentStock <= Math.max(1, Math.floor(prod.minStockAlert / 2));
+                const catName = prod.categoryId ? categoryMap.get(prod.categoryId) || 'General' : 'General';
+
+                return (
+                  <React.Fragment key={prod.id}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        borderRadius: '24px',
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #f2ecf7',
+                        gap: '12px'
+                      }}
+                    >
+                      {/* Ícono de Producto y Nombre */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            backgroundColor: isCritical ? '#f3d6f9' : '#ece6f1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#310344',
+                            flexShrink: 0
+                          }}
+                        >
+                          <Package size={18} />
+                        </div>
+
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: '15px',
+                              fontWeight: 600,
+                              color: '#1d1a22',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}
+                          >
+                            {prod.name}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#7e747f' }}>
+                            Cat: {catName} • Mín: {prod.minStockAlert} {prod.unit}s
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stock Restante y Badge de Estado */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                        <span
+                          style={{
+                            fontSize: '15px',
+                            fontWeight: 600,
+                            color: '#1d1a22',
+                            fontFamily: 'var(--font-sans)'
+                          }}
+                        >
+                          {prod.currentStock} {prod.unit}s
+                        </span>
+
+                        <span
+                          style={{
+                            backgroundColor: isCritical ? '#d1c0df' : '#ece6f1',
+                            color: isCritical ? '#4d444e' : '#6d5773',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            letterSpacing: '1px',
+                            textTransform: 'uppercase',
+                            padding: '3px 8px',
+                            borderRadius: '12px'
+                          }}
+                        >
+                          {isCritical ? 'CRÍTICO' : 'BAJO'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {idx < lowStockProducts.length - 1 && (
+                      <div style={{ height: '1px', backgroundColor: '#e6e0eb', margin: '0 8px' }} />
+                    )}
+                  </React.Fragment>
+                );
+              })
             )}
+          </div>
+
+          {/* Caja de Recomendación Inteligente (Figma 1:854) */}
+          <div
+            style={{
+              backgroundColor: '#f8f1fd',
+              borderRadius: '20px',
+              padding: '20px 24px',
+              display: 'flex',
+              gap: '14px',
+              alignItems: 'flex-start',
+              border: '1px solid #ece6f1'
+            }}
+          >
+            <Sparkles size={20} color="#7a4c8c" style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ fontSize: '13.5px', color: '#4d444e', lineHeight: 1.5 }}>
+              {mostCriticalProduct ? (
+                <>
+                  Se recomienda generar una orden de reposición para{' '}
+                  <strong style={{ color: '#310344' }}>{mostCriticalProduct.name}</strong> antes del próximo ciclo de
+                  ventas debido a su nivel crítico en inventario.
+                </>
+              ) : (
+                <>
+                  El flujo de stock actual cubre la demanda proyectada. Recuerda realizar cuadraturas de caja al cierre de
+                  la jornada.
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Modal para Registrar Ganancia Externa */}
+      {/* ========================================================================= */}
+      {/* Modal: Selector de Fecha                                                  */}
+      {/* ========================================================================= */}
       <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Registrar Ganancia de Plataforma Externa"
+        isOpen={isDatePickerOpen}
+        onClose={() => setIsDatePickerOpen(false)}
+        title="Seleccionar Fecha de Reporte"
+        subtitle="Consulta el consolidado de ventas y caja de cualquier día"
+        maxWidth="420px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#4d444e',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: '8px'
+              }}
+            >
+              FECHA DE CONSULTA
+            </label>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              style={{
+                width: '100%',
+                height: '48px',
+                borderRadius: '24px',
+                border: '1px solid #cfc3cf',
+                padding: '0 16px',
+                fontSize: '15px',
+                fontWeight: 600,
+                color: '#1d1a22',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedDate(new Date().toISOString().split('T')[0]);
+                setIsDatePickerOpen(false);
+              }}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '9999px',
+                backgroundColor: '#f8f1fd',
+                border: 'none',
+                color: '#310344',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Hoy
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsDatePickerOpen(false)}
+              style={{
+                padding: '10px 24px',
+                borderRadius: '9999px',
+                backgroundColor: '#310344',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Aplicar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* Modal: Registrar Ganancia de Plataforma Externa                            */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={isExternalModalOpen}
+        onClose={() => setIsExternalModalOpen(false)}
+        title="Registrar Ganancia Externa"
+        subtitle="Ingresa comisiones o ingresos por recargas y corresponsal bancario"
         maxWidth="460px"
       >
-        <form onSubmit={handleAddExternal} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleAddExternal} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '6px' }}>
-              Plataforma o Servicio *
+            <label
+              style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#4d444e',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: '8px'
+              }}
+            >
+              PLATAFORMA O SERVICIO *
             </label>
             <input
               type="text"
               required
               placeholder="Ej. Recargas Claro/Movistar, TuLlave, Corresponsal..."
               value={platformName}
-              onChange={e => setPlatformName(e.target.value)}
-              style={{ width: '100%' }}
+              onChange={(e) => setPlatformName(e.target.value)}
+              style={{
+                width: '100%',
+                height: '48px',
+                borderRadius: '24px',
+                border: '1px solid #cfc3cf',
+                padding: '0 16px',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: '#1d1a22',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
               autoFocus
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-success)' }}>
-              Ganancia / Comisión Liquidada ($) *
+            <label
+              style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#310344',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: '8px'
+              }}
+            >
+              COMISIÓN / GANANCIA LIQUIDADA ($) *
             </label>
             <input
-              type="number"
-              min="1"
+              type="text"
               required
               placeholder="0"
-              value={earningAmount || ''}
-              onChange={e => setEarningAmount(Number(e.target.value))}
-              style={{ width: '100%', fontSize: '20px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--color-success)' }}
+              value={earningAmountRaw}
+              onChange={(e) => {
+                const clean = parseCOPInput(e.target.value);
+                setEarningAmountRaw(clean > 0 ? formatNumberWithDots(clean) : '');
+              }}
+              style={{
+                width: '100%',
+                height: '52px',
+                borderRadius: '26px',
+                border: '1.5px solid #cfc3cf',
+                padding: '0 18px',
+                fontSize: '20px',
+                fontWeight: 700,
+                color: '#310344',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: 600, marginBottom: '6px' }}>
-              Notas (Opcional)
+            <label
+              style={{
+                display: 'block',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#4d444e',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: '8px'
+              }}
+            >
+              NOTAS (OPCIONAL)
             </label>
             <input
               type="text"
-              placeholder="Ej. Comisión liquidada corte 6:00 PM"
+              placeholder="Ej. Liquidación corte 6:00 PM"
               value={earningNotes}
-              onChange={e => setEarningNotes(e.target.value)}
-              style={{ width: '100%' }}
+              onChange={(e) => setEarningNotes(e.target.value)}
+              style={{
+                width: '100%',
+                height: '44px',
+                borderRadius: '22px',
+                border: '1px solid #cfc3cf',
+                padding: '0 16px',
+                fontSize: '13px',
+                color: '#1d1a22',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
             />
           </div>
 
-          <Button type="submit" variant="success" size="lg" isFullWidth disabled={earningAmount <= 0}>
-            SUMAR A GANANCIA DEL DÍA
-          </Button>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+            <button
+              type="button"
+              onClick={() => setIsExternalModalOpen(false)}
+              style={{
+                padding: '12px 20px',
+                borderRadius: '9999px',
+                backgroundColor: 'transparent',
+                border: '1px solid #cfc3cf',
+                color: '#4d444e',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="submit"
+              disabled={parseCOPInput(earningAmountRaw) <= 0}
+              style={{
+                padding: '12px 28px',
+                borderRadius: '9999px',
+                backgroundColor: '#310344',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: parseCOPInput(earningAmountRaw) > 0 ? 'pointer' : 'not-allowed',
+                boxShadow: '0 6px 16px rgba(49, 3, 68, 0.2)'
+              }}
+            >
+              Sumar a Ganancia
+            </button>
+          </div>
         </form>
       </Modal>
 
       <style>{`
-        @media (max-width: 800px) {
-          .reports-columns {
+        @media (max-width: 960px) {
+          .reports-bento-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .reports-top-cards {
             grid-template-columns: 1fr !important;
           }
         }
