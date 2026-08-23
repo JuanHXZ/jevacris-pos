@@ -1,0 +1,80 @@
+:root {
+  /* JEVACRIS Editorial Boutique Palette (DESIGN.md) */
+  --bg-app: #fdf7ff;
+  --surface: #fdf7ff;
+  --surface-dim: #ded8e3;
+  --surface-bright: #fdf7ff;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f8f1fd;
+  --surface-container: #f2ecf7;
+  --surface-container-high: #ece6f1;
+  --surface-container-highest: #e6e0eb;
+
+  /* On Colors */
+  --on-surface: #1d1a22;
+  --on-surface-variant: #4d444e;
+  --on-background: #1d1a22;
+
+  /* Primary (Midnight Orchid) */
+  --primary: #010001;
+  --on-primary: #ffffff;
+  --primary-container: #310344;
+  --on-primary-container: #a371b5;
+  --primary-fixed: #f8d8ff;
+  --primary-fixed-dim: #eab3fc;
+  --on-primary-fixed: #310344;
+  --on-primary-fixed-variant: #613473;
+
+  /* Secondary (Dusky Lilac) */
+  --secondary: #6d5773;
+  --on-secondary: #ffffff;
+  --secondary-container: #f3d6f9;
+  --on-secondary-container: #725b78;
+  --secondary-fixed: #f6d9fb;
+  --secondary-fixed-dim: #d9bddf;
+  --on-secondary-fixed: #27142d;
+  --on-secondary-fixed-variant: #543f5b;
+
+  /* Accent / Interactive (Iris Mist) */
+  --surface-tint: #7a4c8c;
+  --tertiary: #000002;
+  --tertiary-container: #21172e;
+  --on-tertiary-container: #8d7e9a;
+
+  /* Outlines & Borders */
+  --outline: #7e747f;
+  --outline-variant: #cfc3cf;
+  --border-subtle: rgba(207, 195, 207, 0.4);
+  --border-default: #e6e0eb;
+
+  /* Status Colors */
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-success: #10b981;
+  --color-success-bg: rgba(16, 185, 129, 0.12);
+
+  /* Typography Scales (Hanken Grotesk) */
+  --font-sans: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Spacing */
+  --spacing-unit: 8px;
+  --safe-margin: 48px;
+  --gutter-asymmetric: 32px;
+  --overlap-offset: -24px;
+
+  /* Border Radii */
+  --radius-sm: 0.5rem;
+  --radius-default: 1rem;
+  --radius-md: 1.5rem;
+  --radius-lg: 2rem;
+  --radius-xl: 3rem;
+  --radius-full: 9999px;
+
+  /* Shadows (Tonal Ambient) */
+  --shadow-sm: 0 4px 12px rgba(49, 3, 68, 0.04);
+  --shadow-md: 0 12px 24px rgba(49, 3, 68, 0.06);
+  --shadow-lg: 0 24px 48px rgba(49, 3, 68, 0.08);
+  --shadow-editorial: 24px 24px 48px rgba(49, 3, 68, 0.12);
+  --shadow-editorial-subtle: 24px 0 48px rgba(49, 3, 68, 0.04);
+}
