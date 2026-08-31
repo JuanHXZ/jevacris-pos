@@ -96,3 +96,16 @@ export interface DailySummary {
   externalEarnings: number;
   totalProfit: number;
 }
+
+export interface PinAuthState {
+  isLocked: boolean;
+  isPinConfigured: boolean;
+  autoLockMinutes?: number;
+}
+
+export interface PinConfig {
+  salt: string;
+  hash: string;
+  autoLockMinutes: number;
+  updatedAt: string;
+}

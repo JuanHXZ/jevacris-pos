@@ -47,11 +47,41 @@
   --border-subtle: rgba(207, 195, 207, 0.4);
   --border-default: #e6e0eb;
 
-  /* Status Colors */
+  /* Status Colors & Brand Aliases */
   --color-error: #ba1a1a;
   --color-error-container: #ffdad6;
+  --color-danger: #ba1a1a;
+  --color-danger-bg: rgba(186, 26, 26, 0.12);
+  --color-danger-border: rgba(186, 26, 26, 0.25);
   --color-success: #10b981;
   --color-success-bg: rgba(16, 185, 129, 0.12);
+  --color-success-border: rgba(16, 185, 129, 0.25);
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.12);
+  --color-warning-border: rgba(217, 119, 6, 0.25);
+
+  --accent-danger: #ba1a1a;
+  --accent-success: #10b981;
+  --accent-warning: #d97706;
+
+  /* Brand Primary Aliases (Midnight Orchid / Plum) */
+  --brand-primary: #310344;
+  --brand-primary-light: #f3d6f9;
+  --brand-primary-hover: #4a0966;
+  --on-brand-primary: #f6d9fb;
+
+  /* Background Surface Aliases */
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #f2ecf7;
+  --bg-card: #ffffff;
+  --bg-card-secondary: #f2ecf7;
+
+  /* Text Aliases */
+  --text-primary: #1d1a22;
+  --text-secondary: #4d444e;
+  --text-muted: #7e747f;
+
+  --shadow-glow-brand: 0 8px 24px rgba(49, 3, 68, 0.25);
 
   /* Typography Scales (Hanken Grotesk) */
   --font-sans: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;

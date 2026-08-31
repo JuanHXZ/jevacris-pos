@@ -1,5 +1,16 @@
 import React from 'react';
-import { ShoppingCart, Package, ArrowDownToLine, BarChart3, Wifi, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
+import {
+  ShoppingCart,
+  Package,
+  ArrowDownToLine,
+  BarChart3,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  AlertCircle,
+  Lock,
+  KeyRound
+} from 'lucide-react';
 import { useSync } from '../../hooks/useSync';
 import { SideNavBar } from './SideNavBar';
 
@@ -8,12 +19,18 @@ export type TabId = 'pos' | 'inventory' | 'stock' | 'reports';
 interface AppShellProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
+  isPinConfigured?: boolean;
+  onLock?: () => void;
+  onOpenPinSettings?: () => void;
   children: React.ReactNode;
 }
 
 export const AppShell: React.FC<AppShellProps> = ({
   activeTab,
   onTabChange,
+  isPinConfigured = false,
+  onLock,
+  onOpenPinSettings,
   children
 }) => {
   const { status, lastSyncedAt, triggerSync, isSyncing } = useSync();
@@ -73,6 +90,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         activeTab={activeTab}
         onTabChange={onTabChange}
         onNewSale={() => onTabChange('pos')}
+        onOpenSettings={onOpenPinSettings}
       />
 
       {/* Main Content Area + Top Header */}
@@ -85,12 +103,70 @@ export const AppShell: React.FC<AppShellProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
+            gap: '12px',
             padding: '0 32px',
             position: 'sticky',
             top: 0,
             zIndex: 100
           }}
         >
+          {/* Botón Bloqueo Rápido / Configuración PIN */}
+          {isPinConfigured ? (
+            <button
+              onClick={onLock}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                color: 'var(--accent-danger)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Bloquear terminal inmediatamente (Atajo: Alt + L)"
+            >
+              <Lock size={14} />
+              <span>Bloquear</span>
+              <kbd
+                style={{
+                  fontSize: '10px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                  padding: '1px 5px',
+                  borderRadius: '3px',
+                  fontWeight: 700
+                }}
+              >
+                Alt+L
+              </kbd>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenPinSettings}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: 'var(--bg-card-secondary)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-default)',
+                cursor: 'pointer'
+              }}
+              title="Configurar PIN de seguridad para proteger el terminal"
+            >
+              <KeyRound size={14} />
+              <span>Configurar PIN</span>
+            </button>
+          )}
+
           {/* Sync Status Button & Indicator */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button

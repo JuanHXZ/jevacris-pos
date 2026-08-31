@@ -7,6 +7,7 @@
 | Tiempo de carga inicial | La aplicación debe cargar en menos de 1.5 segundos en redes móviles estándar y de forma instantánea (< 500 ms) una vez cacheada por el Service Worker (PWA). |
 | Latencia en POS | La adición de productos al carrito, el recálculo de subtotales/vueltas y el registro de la venta deben responder en < 100 ms para no generar fricción frente al cliente (operación local inmediata). |
 | Búsqueda de catálogo | El filtrado instantáneo por texto en el catálogo debe responder en tiempo real mientras el usuario tipea (debounced a 50 ms). |
+| Optimización de imágenes | Las fotos de productos (Fase 2) se entregan vía CDN de Cloudinary con compresión automática y formato adaptativo (WebP/AVIF) para minimizar consumo de datos móviles. |
 
 ## Disponibilidad y datos
 
@@ -16,6 +17,7 @@
 | Sincronización en la Nube | Sincronización bidireccional automática en segundo plano con Supabase (PostgreSQL) cuando hay conexión a internet. |
 | Sincronización Multi-dispositivo | Los registros creados o modificados en el PC de escritorio deben sincronizarse y estar disponibles en el teléfono móvil (y viceversa) a través de la nube. |
 | Resiliencia y Recuperación | Si se borra la caché del navegador o se cambia de dispositivo, los datos se restauran automáticamente desde la nube al iniciar sesión. Adicionalmente, se conserva la opción de exportar/importar respaldos en JSON local. |
+| Exportabilidad | Capacidad de exportar reportes diarios y consolidados a formatos estándar (Excel / PDF / CSV) de forma inmediata en el cliente. |
 
 ## Compatibilidad y plataforma
 
@@ -29,8 +31,8 @@
 
 | Categoría | Requisito |
 |-----------|-----------|
-| Autenticación / Acceso | Acceso unificado de tienda con credenciales seguras (o PIN) gestionadas mediante Supabase Auth para proteger el acceso a la base de datos cloud. |
-| Políticas de Seguridad (RLS) | Configuración de Row Level Security (RLS) en Supabase para garantizar que solo la dueña de la tienda pueda consultar y modificar sus propios datos. |
+| Autenticación / Acceso | **Bloqueo de acceso mediante PIN local (ver ADR-008):** verificado en el dispositivo, funciona 100% sin conexión y sin costos de mensajería externa (SMS/WhatsApp). |
+| Políticas de Seguridad (RLS) | Configuración de Row Level Security (RLS) en Supabase para garantizar que solo la dueña de la tienda pueda consultar y modificar sus propios datos en la nube. |
 
 ## UX y Usabilidad
 

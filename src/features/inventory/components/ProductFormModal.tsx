@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, ArrowRight, Plus, Check } from 'lucide-react';
+import { Sparkles, ArrowRight, Plus, Check, Trash2, AlertTriangle } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
+import { Button } from '../../../components/ui/Button';
 import { productRepository } from '../../../repositories/productRepository';
-import { db } from '../../../db';
 import { formatNumberWithDots, parseCOPInput } from '../../../utils/currency';
 import type { Product, Category, ProductType } from '../../../types';
 
@@ -12,7 +12,7 @@ interface ProductFormModalProps {
   editingProduct: Product | null;
   categories: Category[];
   initialName?: string;
-  onSuccess?: (createdProductId: string) => void;
+  onSuccess?: (productId: string, actionType: 'create' | 'update' | 'delete', productName: string) => void;
 }
 
 const COMMON_UNITS = ['unidad', 'litro', 'galón', 'barra', 'bolsa', 'ml', 'kg', 'servicio'];
@@ -34,22 +34,27 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [salePrice, setSalePrice] = useState<number>(0);
   const [currentStock, setCurrentStock] = useState<number>(0);
   const [minStockAlert, setMinStockAlert] = useState<number>(5);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Estados para creación rápida de categoría
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
   useEffect(() => {
+    if (!isOpen) return;
+
     if (editingProduct) {
       setName(editingProduct.name);
       setCategoryId(editingProduct.categoryId || (categories[0]?.id ?? ''));
       setType(editingProduct.type);
       setUnit(editingProduct.unit);
-      setCostPrice(editingProduct.costPrice);
-      setMarginPercentage(editingProduct.marginPercentage);
-      setSalePrice(editingProduct.salePrice);
-      setCurrentStock(editingProduct.currentStock);
-      setMinStockAlert(editingProduct.minStockAlert);
+      setCostPrice(editingProduct.costPrice || 0);
+      setMarginPercentage(editingProduct.marginPercentage || 0);
+      setSalePrice(editingProduct.salePrice || 0);
+      setCurrentStock(editingProduct.currentStock || 0);
+      setMinStockAlert(editingProduct.minStockAlert || 5);
     } else {
       setName(initialName || '');
       setCategoryId(categories[0]?.id ?? '');
@@ -63,7 +68,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }
     setIsAddingCategory(false);
     setNewCategoryName('');
-  }, [editingProduct, categories, isOpen, initialName]);
+    setIsDeleting(false);
+    setError(null);
+    setIsSubmitting(false);
+  }, [editingProduct, isOpen, initialName]); // categories removido intencionalmente para no borrar los datos ingresados al crear categorías
 
   const handleCostChange = (newCost: number) => {
     setCostPrice(newCost);
@@ -81,83 +89,82 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim()) return;
-    const now = new Date().toISOString();
-    const newCatId = `cat-${Date.now()}`;
-    const newCat: Category = {
-      id: newCatId,
-      name: newCategoryName.trim(),
-      icon: 'Package',
-      createdAt: now,
-      updatedAt: now,
-      synced: false
-    };
-
-    await db.categories.add(newCat);
-    setCategoryId(newCatId);
-    setNewCategoryName('');
-    setIsAddingCategory(false);
-  };
-
-  // Fase futura: Eliminación de categoría
-  /*
-  const handleDeleteCategory = async () => {
-    if (!categoryId) return;
-    const catToDelete = categories.find((c) => c.id === categoryId);
-    if (!catToDelete) return;
-
-    const otherCats = categories.filter((c) => c.id !== categoryId);
-    if (otherCats.length === 0) {
-      alert('Debe existir al menos una categoría en el sistema.');
-      return;
-    }
-
-    const count = await db.products.where('categoryId').equals(categoryId).count();
-    const msg =
-      count > 0
-        ? `¿Estás seguro de eliminar la categoría "${catToDelete.name}"? Tiene ${count} productos asociados.`
-        : `¿Estás seguro de eliminar la categoría "${catToDelete.name}"?`;
-
-    if (confirm(msg)) {
-      await db.categories.delete(categoryId);
-      setCategoryId(otherCats[0].id);
+    try {
+      const newCatId = await productRepository.createCategory(newCategoryName);
+      setCategoryId(newCatId);
+      setNewCategoryName('');
+      setIsAddingCategory(false);
+    } catch (err: any) {
+      setError(err.message || 'Error al crear la categoría');
     }
   };
-  */
+
+  const handleDeleteProduct = async () => {
+    if (!editingProduct) return;
+    try {
+      setIsSubmitting(true);
+      const prodName = editingProduct.name;
+      const prodId = editingProduct.id;
+      await productRepository.delete(prodId);
+      if (onSuccess) onSuccess(prodId, 'delete', prodName);
+      onClose();
+    } catch (err: any) {
+      setIsSubmitting(false);
+      setError(err.message || 'Error al eliminar el producto');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    setError(null);
 
-    if (editingProduct) {
-      await productRepository.update(editingProduct.id, {
-        name: name.trim(),
-        categoryId: categoryId || undefined,
-        type,
-        unit: unit.trim(),
-        costPrice: type === 'physical' ? costPrice : 0,
-        marginPercentage: type === 'physical' ? marginPercentage : 0,
-        salePrice,
-        currentStock: type === 'physical' ? currentStock : 0,
-        minStockAlert: type === 'physical' ? minStockAlert : 0
-      });
-      if (onSuccess) onSuccess(editingProduct.id);
-    } else {
-      const newId = await productRepository.create({
-        name: name.trim(),
-        categoryId: categoryId || undefined,
-        type,
-        unit: unit.trim(),
-        costPrice: type === 'physical' ? costPrice : 0,
-        marginPercentage: type === 'physical' ? marginPercentage : 0,
-        salePrice,
-        currentStock: type === 'physical' ? currentStock : 0,
-        minStockAlert: type === 'physical' ? minStockAlert : 0,
-        isActive: true
-      });
-      if (onSuccess) onSuccess(newId);
+    if (!name.trim()) {
+      setError('El nombre del producto es obligatorio');
+      return;
+    }
+    if (salePrice <= 0) {
+      setError('El precio de venta debe ser mayor a $0');
+      return;
     }
 
-    onClose();
+    try {
+      setIsSubmitting(true);
+      const trimmedName = name.trim();
+
+      if (editingProduct) {
+        await productRepository.update(editingProduct.id, {
+          name: trimmedName,
+          categoryId: categoryId || undefined,
+          type,
+          unit: unit.trim() || (type === 'physical' ? 'unidad' : 'servicio'),
+          costPrice: type === 'physical' ? costPrice : 0,
+          marginPercentage: type === 'physical' ? marginPercentage : 0,
+          salePrice,
+          currentStock: type === 'physical' ? currentStock : 0,
+          minStockAlert: type === 'physical' ? minStockAlert : 0
+        });
+        if (onSuccess) onSuccess(editingProduct.id, 'update', trimmedName);
+        onClose();
+      } else {
+        const newId = await productRepository.create({
+          name: trimmedName,
+          categoryId: categoryId || undefined,
+          type,
+          unit: unit.trim() || (type === 'physical' ? 'unidad' : 'servicio'),
+          costPrice: type === 'physical' ? costPrice : 0,
+          marginPercentage: type === 'physical' ? marginPercentage : 0,
+          salePrice,
+          currentStock: type === 'physical' ? currentStock : 0,
+          minStockAlert: type === 'physical' ? minStockAlert : 0,
+          isActive: true
+        });
+        if (onSuccess) onSuccess(newId, 'create', trimmedName);
+        onClose();
+      }
+    } catch (err: any) {
+      setIsSubmitting(false);
+      setError(err.message || 'Error al guardar el producto');
+    }
   };
 
   return (
@@ -169,6 +176,27 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       maxWidth="580px"
     >
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        {/* Error Alert */}
+        {error && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              backgroundColor: 'var(--color-danger-bg)',
+              color: 'var(--color-danger)',
+              padding: '12px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--color-danger-border)',
+              fontSize: '13.5px',
+              fontWeight: 600
+            }}
+          >
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Nombre del Producto */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <label
@@ -355,10 +383,6 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 ))}
               </select>
             )}
-            {/*
-            Fase futura: Botón para eliminar categoría
-            <button type="button" onClick={handleDeleteCategory}>...</button>
-            */}
           </div>
 
           {/* Tipo de Ítem */}
@@ -400,65 +424,67 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </div>
         </div>
 
-        {/* Unidad de Medida / Presentación con Chips de sugerencia rápida */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <label
-            style={{
-              fontSize: '11.5px',
-              fontWeight: 700,
-              color: '#4d444e',
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              fontFamily: 'var(--font-sans)'
-            }}
-          >
-            UNIDAD DE MEDIDA / PRESENTACIÓN
-          </label>
+        {/* Unidad de Medida / Presentación con Chips de sugerencia rápida (Solo para productos físicos) */}
+        {type === 'physical' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label
+              style={{
+                fontSize: '11.5px',
+                fontWeight: 700,
+                color: '#4d444e',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                fontFamily: 'var(--font-sans)'
+              }}
+            >
+              UNIDAD DE MEDIDA / PRESENTACIÓN
+            </label>
 
-          <input
-            type="text"
-            placeholder="unidad, litro, galón, barra, bolsa..."
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            style={{
-              width: '100%',
-              height: '48px',
-              backgroundColor: '#ffffff',
-              border: '1px solid #cfc3cf',
-              borderRadius: '24px',
-              padding: '0 20px',
-              fontSize: '14.5px',
-              color: '#1d1a22',
-              outline: 'none',
-              boxSizing: 'border-box',
-              fontFamily: 'var(--font-sans)'
-            }}
-          />
+            <input
+              type="text"
+              placeholder="unidad, litro, galón, barra, bolsa..."
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              style={{
+                width: '100%',
+                height: '48px',
+                backgroundColor: '#ffffff',
+                border: '1px solid #cfc3cf',
+                borderRadius: '24px',
+                padding: '0 20px',
+                fontSize: '14.5px',
+                color: '#1d1a22',
+                outline: 'none',
+                boxSizing: 'border-box',
+                fontFamily: 'var(--font-sans)'
+              }}
+            />
 
-          {/* Chips de selección rápida de unidades */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
-            {COMMON_UNITS.map((u) => (
-              <button
-                key={u}
-                type="button"
-                onClick={() => setUnit(u)}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: '9999px',
-                  border: unit.toLowerCase() === u ? '1px solid #310344' : '1px solid rgba(207, 195, 207, 0.5)',
-                  backgroundColor: unit.toLowerCase() === u ? '#f6d9fb' : '#f8f1fd',
-                  color: unit.toLowerCase() === u ? '#27142d' : '#4d444e',
-                  fontSize: '12px',
-                  fontWeight: unit.toLowerCase() === u ? 700 : 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {u}
-              </button>
-            ))}
+            {/* Chips de selección rápida de unidades */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '2px' }}>
+              {COMMON_UNITS.map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setUnit(u)}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '9999px',
+                    border: unit.toLowerCase() === u ? '1px solid #310344' : '1px solid rgba(207, 195, 207, 0.5)',
+                    backgroundColor: unit.toLowerCase() === u ? '#f6d9fb' : '#f8f1fd',
+                    color: unit.toLowerCase() === u ? '#27142d' : '#4d444e',
+                    fontSize: '12px',
+                    fontWeight: unit.toLowerCase() === u ? 700 : 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Fijación de Precios Automática (Boutique Card) */}
         {type === 'physical' && (
@@ -692,51 +718,71 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           </div>
         )}
 
-        {/* Botón de Guardado */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
-          <button
-            type="button"
-            onClick={onClose}
+        {/* Sección de Confirmación de Borrado si está en modo edición */}
+        {editingProduct && isDeleting && (
+          <div
             style={{
-              padding: '14px 24px',
-              borderRadius: '9999px',
-              backgroundColor: 'transparent',
-              border: '1px solid #cfc3cf',
-              color: '#4d444e',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'background-color 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#f2ecf7')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            Cancelar
-          </button>
-
-          <button
-            type="submit"
-            style={{
-              padding: '14px 32px',
-              borderRadius: '9999px',
-              backgroundColor: '#310344',
-              color: '#ffffff',
-              border: 'none',
-              fontWeight: 700,
-              fontSize: '15px',
-              cursor: 'pointer',
+              backgroundColor: 'var(--color-danger-bg)',
+              border: '1px solid var(--color-danger-border)',
+              borderRadius: 'var(--radius-md)',
+              padding: '16px',
               display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 8px 18px rgba(49, 3, 68, 0.2)',
-              transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+              flexDirection: 'column',
+              gap: '12px'
             }}
-            onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-            onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
-            <span>{editingProduct ? 'Guardar Cambios' : 'Crear Producto'}</span>
-            <ArrowRight size={16} />
-          </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-danger)', fontWeight: 700, fontSize: '14px' }}>
+              <AlertTriangle size={18} />
+              <span>¿Desactivar "{editingProduct.name}" del catálogo?</span>
+            </div>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+              El producto se ocultará del POS e inventario activo, pero se mantendrá en el histórico de ventas pasadas.
+            </p>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setIsDeleting(false)}>
+                Cancelar
+              </Button>
+              <Button type="button" variant="danger" size="sm" onClick={handleDeleteProduct}>
+                Sí, Desactivar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Botones de Acción */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px' }}>
+          <div>
+            {editingProduct && !isDeleting && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                leftIcon={<Trash2 size={16} color="var(--color-danger)" />}
+                onClick={() => setIsDeleting(true)}
+                style={{ color: 'var(--color-danger)' }}
+              >
+                Desactivar Producto
+              </Button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={isSubmitting}
+              rightIcon={!isSubmitting ? <ArrowRight size={16} /> : undefined}
+            >
+              {isSubmitting
+                ? 'Guardando...'
+                : editingProduct
+                ? 'Guardar Cambios'
+                : 'Crear Producto'}
+            </Button>
+          </div>
         </div>
       </form>
     </Modal>

@@ -6,6 +6,7 @@ import { InventoryTable } from './components/InventoryTable';
 import { ProductDetailCard } from './components/ProductDetailCard';
 import { InventorySummaryCard } from './components/InventorySummaryCard';
 import { ProductFormModal } from './components/ProductFormModal';
+import { Toast } from '../../components/ui/Toast';
 import type { Product } from '../../types';
 
 export const InventoryView: React.FC = () => {
@@ -15,6 +16,7 @@ export const InventoryView: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
   const products = useLiveQuery(() => db.products.filter(p => p.isActive !== false).toArray()) || [];
@@ -40,6 +42,20 @@ export const InventoryView: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleProductSuccess = (productId: string, actionType: 'create' | 'update' | 'delete', productName: string) => {
+    if (actionType === 'create') {
+      setToast({ message: `¡Producto "${productName}" creado exitosamente!`, type: 'success' });
+      // Buscar el producto recién creado para seleccionarlo
+      const created = products.find(p => p.id === productId);
+      if (created) setSelectedProduct(created);
+    } else if (actionType === 'update') {
+      setToast({ message: `¡Producto "${productName}" actualizado exitosamente!`, type: 'success' });
+    } else if (actionType === 'delete') {
+      setToast({ message: `Producto "${productName}" desactivado del catálogo`, type: 'info' });
+      setSelectedProduct(null);
+    }
+  };
+
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'all' || product.categoryId === categoryFilter;
@@ -48,6 +64,15 @@ export const InventoryView: React.FC = () => {
 
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+      {/* Toast Notification Flotante */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
       {/* Abstract Background Blobs (Organic Minimalism from DESIGN.md) */}
       <div className="blob-ambient-1" />
       <div className="blob-ambient-2" />
@@ -127,6 +152,7 @@ export const InventoryView: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         editingProduct={editingProduct}
         categories={categories}
+        onSuccess={handleProductSuccess}
       />
 
       {/* Responsive Styles */}

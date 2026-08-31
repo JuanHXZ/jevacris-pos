@@ -25,7 +25,7 @@
 | ID | Feature | Prioridad | Clasificación | Justificación / Notas |
 |----|---------|-----------|---------------|------------------------|
 | RF11 | Registro de entrada de stock por producto (cantidad ingresada y fecha) | Alta | Must-Have MVP | Conecta directamente las compras con el inventario sin doble digitación en hojas separadas. |
-| RF12 | Actualización opcional de costo de compra al ingresar mercancía | Alta | Must-Have MVP | Evita la doble tarea de ir al catálogo a cambiar el costo cada vez que un proveedor sube el precio en una factura de compra. |
+| RF12 | Actualización opcional de costo de compra al ingresar mercancía | Alta | Must-Have MVP | Facilita mantener costos y márgenes al día cuando los proveedores cambian precios durante el mismo flujo de entrada de mercancía. |
 
 ## 4. Reportes, Cuadre de Caja y Consolidación de Ganancias
 
@@ -33,7 +33,7 @@
 |----|---------|-----------|---------------|------------------------|
 | RF13 | Resumen diario de ventas totales y desglose por medio de pago (Efectivo vs. Transferencias) | Alta | Must-Have MVP | Facilita el cuadre de caja al cierre del día sin hacer cuentas manuales. |
 | RF14 | Registro manual de ganancias externas (ingreso de ganancias de plataformas de recargas/corresponsal) | Alta | Must-Have MVP | Permite consolidar la ganancia neta total diaria/semanal integrando las plataformas externas que ya liquidan su ganancia. |
-| RF15 | Indicador de ganancia bruta total del día (Ganancia productos físicos + Ganancias externas registradas) | Alta | Must-Have MVP | Da visibilidad instantánea de la rentabilidad real completa del negocio. |
+| RF15 | Indicador de ganancia bruta total del día (Ganancia productos físicos + Ganancias externas registradas) | Alta | Must-Have MVP | Da visibilidad instantánea de la rentabilidad real completa del negocio. Ver regla de negocio en ADR-004 (`05-decisiones.md`): la ganancia de productos excluye explícitamente los ítems de tipo servicio. |
 | RF16 | Listado de alertas de productos agotados o por debajo del stock mínimo | Alta | Must-Have MVP | Evita quedarse sin productos de alta rotación (ej. jabón rey, suavizante). |
 
 ## 5. Operatividad y Persistencia Offline
@@ -42,14 +42,30 @@
 |----|---------|-----------|---------------|------------------------|
 | RF17 | PWA con almacenamiento local completo de catálogo, ventas y reportes (Offline-First) | Alta | Must-Have MVP | Garantiza continuidad operativa total en PC y móvil ante caídas o ausencia de conexión a internet. |
 
+---
+
 ## Fase 2 (fuera del MVP)
 
 | ID | Feature | Prioridad | Clasificación | Justificación / Notas |
 |----|---------|-----------|---------------|------------------------|
-| RF18 | Módulo de fiados / cuentas por cobrar a familiares | Media | Fase 2 | No es crítico para la operativa diaria de venta general; se puede gestionar manualmente en el corto plazo. |
+| RF18 | **Módulo de Fiados / Cuentas por Cobrar** — Registrar persona a quien se le fía, valor total de la deuda, desglose de productos incluidos y fecha del fiado. Registro de abonos y cancelación total o parcial de la deuda. | Media | Fase 2 | Ampliado del alcance original ("cuentas por cobrar a familiares"): trazable a persona + productos + fecha, permitiendo cobrar con contexto exacto y gestionar abonos. |
 | RF19 | Integración API o importación directa de reportes desde plataformas de corresponsalía | Media | Fase 2 | Automatización adicional sobre el registro manual de ganancias externas del MVP. |
-| RF20 | Exportación de reportes a Excel / PDF y respaldos automáticos en la nube | Media | Fase 2 | Valor agregado para contabilidad formal, pero prescindible para el arranque inicial. |
+| RF20 | **Exportación de reportes a Excel / PDF / CSV** y respaldos automáticos en la nube | Media | Fase 2 | Generación de archivos descargables con el detalle de ventas, arqueos y ganancias para contabilidad y archivo histórico. |
 | RF21 | Gestión de múltiples usuarios o turnos de caja | Baja | Fase 2 | El negocio es unipersonal actualmente. |
+| RF22 | **Apertura y cierre de caja (Arqueo)** con registro de gastos operativos varios (arriendo, servicios, imprevistos) | Alta | Fase 2 | Compara el efectivo físico contado al abrir y cerrar contra el cálculo del sistema para detectar faltantes/sobrantes y deducir gastos reales. |
+| RF23 | **Bloqueo de acceso por PIN local** | Alta | Fase 2 | Resuelve el acceso seguro sin depender de conexión a internet ni costos de OTP por SMS/WhatsApp (ver ADR-008). |
+| RF24 | **Fotos de productos en el catálogo alojadas en Cloudinary** | Media | Fase 2 | Subida y visualización de imágenes de productos al crear o editar desde el modal de catálogo, almacenadas en Cloudinary con URL guardada en la base de datos (ver ADR-010). |
+| RF25 | **Gestión de proveedores**: alta/edición de proveedores y vinculación opcional al crear productos o registrar entradas de stock | Media | Fase 2 | Permite trazabilidad de compras por proveedor y comparar costos entre distintos distribuidores. |
+| RF26 | **Visualización de detalle completo por día específico y exportación histórica** | Media | Fase 2 | Permite consultar mediante un selector de fecha el reporte exhaustivo de cualquier día pasado (transacciones desglosadas, medios de pago, ganancias, arqueo) y exportarlo a Excel/PDF. |
+| RF27 | **Múltiples Cajas de Facturación / Fondos de Dinero Separados por Línea de Producto**: cajas físicas/contables independientes | Media | Fase 2 | Permite asignar categorías de productos a cajas registradoras o fondos específicos (ej. caja de productos de aseo, caja de dulces/mecato, caja de servicios) para cuadrar y rastrear el dinero por separado, permitiendo a la vez consolidar gastos compartidos. |
+| RF28 | **Módulo de Distribución de Ingresos y Reinversión Configurable**: porcentajes parametrizables por la dueña | Media | Fase 2 | Calcula la distribución sugerida de ventas diarias en: **Reinversión** (compra de mercancía), **Gastos Operativos** (arriendo/servicios) y **Fondo Personal/Ahorro** (caja chica diaria). Los porcentajes (ej. 60/30/10 por defecto) son 100% configurables por la usuaria en los ajustes. |
+
+### Notas técnicas para la fase de Tech Lead
+
+- **RF24 (fotos con Cloudinary):** Se integrará con el API/SDK de Cloudinary o Widget de subida directa optimizado. Se guarda la URL HTTPS de la imagen en `products.image_url`. No se sobrecarga IndexedDB con archivos binarios pesados y la imagen queda sincronizada automáticamente en todos los dispositivos.
+- **RF26 (reporte diario y exportación):** El motor de reportes permitirá consultar por rango de fechas o día puntual con agregaciones completas y generar exportaciones en formato CSV/Excel (utilizando librerías livianas como `xlsx` o `jspdf`).
+- **RF27 (cajas de facturación):** Requiere una entidad `cash_registers` o `drawers` (cajas de facturación) asociables a categorías o productos (`cash_register_id`). Las transacciones y los arqueos de caja (`cash_sessions`) se vinculan a su respectiva caja de facturación.
+- **RF28 (distribución parametrizable):** Se crea una tabla o configuración local (`app_settings` / `distribution_rules`) donde se almacenan los porcentajes configurados (`reinvestment_pct`, `expenses_pct`, `personal_pct`, cuya suma debe ser 100%).
 
 ---
 
