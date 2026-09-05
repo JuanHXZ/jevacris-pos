@@ -14,6 +14,7 @@ import {
 import { db } from '../../db';
 import { reportsRepository, type WeeklyDayData } from '../../repositories/reportsRepository';
 import { Modal } from '../../components/ui/Modal';
+import { DayTransactionsModal } from './components/DayTransactionsModal';
 import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/currency';
 import type { DailySummary } from '../../types';
 
@@ -34,6 +35,7 @@ export const ReportsView: React.FC = () => {
   const [weeklyData, setWeeklyData] = useState<WeeklyDayData[]>([]);
   const [isExternalModalOpen, setIsExternalModalOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
 
   // Formulario de Ganancia Externa
   const [platformName, setPlatformName] = useState('Recargas Móviles');
@@ -430,8 +432,17 @@ export const ReportsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Card 3: Transacciones */}
+              {/* Card 3: Transacciones (Interactivo / Clickeable para abrir modal) */}
               <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setIsTransactionsModalOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setIsTransactionsModalOpen(true);
+                  }
+                }}
                 style={{
                   backgroundColor: '#f8f1fd',
                   borderRadius: '24px',
@@ -439,20 +450,57 @@ export const ReportsView: React.FC = () => {
                   boxShadow: '8px 0px 8px rgba(49, 3, 68, 0.02)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px'
+                  gap: '8px',
+                  cursor: 'pointer',
+                  border: '1px solid rgba(207, 195, 207, 0.3)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  position: 'relative',
+                  outline: 'none'
                 }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f2e8f8';
+                  e.currentTarget.style.borderColor = 'rgba(122, 76, 140, 0.4)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 10px 24px rgba(49, 3, 68, 0.09)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f8f1fd';
+                  e.currentTarget.style.borderColor = 'rgba(207, 195, 207, 0.3)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '8px 0px 8px rgba(49, 3, 68, 0.02)';
+                }}
+                title="Haz clic para ver el detalle de transacciones individuales"
               >
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#4d444e',
-                    letterSpacing: '1.2px',
-                    textTransform: 'uppercase'
-                  }}
-                >
-                  TRANSACCIONES
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#4d444e',
+                      letterSpacing: '1.2px',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    TRANSACCIONES
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      color: '#7a4c8c',
+                      backgroundColor: '#ffffff',
+                      padding: '3px 8px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(207, 195, 207, 0.5)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}
+                  >
+                    Ver detalle ↗
+                  </span>
+                </div>
+
                 <div
                   style={{
                     fontSize: '32px',
@@ -1079,6 +1127,16 @@ export const ReportsView: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* ========================================================================= */}
+      {/* Modal: Historial Detallado de Transacciones del Día                       */}
+      {/* ========================================================================= */}
+      <DayTransactionsModal
+        isOpen={isTransactionsModalOpen}
+        onClose={() => setIsTransactionsModalOpen(false)}
+        selectedDate={selectedDate}
+        formattedDate={formatEditorialDate(selectedDate)}
+      />
 
       <style>{`
         @media (max-width: 960px) {

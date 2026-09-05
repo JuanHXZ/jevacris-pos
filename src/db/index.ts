@@ -1,6 +1,18 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { Category, Product, Sale, SaleItem, StockEntry, ExternalEarning } from '../types';
 
+export const isDevMode = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('jevacris_dev_mode') === 'true';
+};
+
+export const setDevMode = (enabled: boolean): void => {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('jevacris_dev_mode', enabled ? 'true' : 'false');
+    window.location.reload();
+  }
+};
+
 export class JevacrisDatabase extends Dexie {
   categories!: EntityTable<Category, 'id'>;
   products!: EntityTable<Product, 'id'>;
@@ -9,8 +21,8 @@ export class JevacrisDatabase extends Dexie {
   stockEntries!: EntityTable<StockEntry, 'id'>;
   externalEarnings!: EntityTable<ExternalEarning, 'id'>;
 
-  constructor() {
-    super('jevacris_pos_db');
+  constructor(dbName = isDevMode() ? 'jevacris_pos_dev_db' : 'jevacris_pos_db') {
+    super(dbName);
     this.version(1).stores({
       categories: 'id, name, createdAt, updatedAt, synced',
       products: 'id, name, categoryId, type, currentStock, minStockAlert, isActive, createdAt, updatedAt, synced',
@@ -23,6 +35,12 @@ export class JevacrisDatabase extends Dexie {
 }
 
 export const db = new JevacrisDatabase();
+
+export async function resetDevDatabase(): Promise<void> {
+  if (!isDevMode()) return;
+  await db.delete();
+  window.location.reload();
+}
 
 // Semilla inicial de datos para tienda de productos de aseo JEVACRIS
 export async function seedInitialDataIfNeeded(): Promise<void> {

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { syncEngine, type SyncStatus } from '../sync/syncEngine';
+import { isDevMode } from '../db';
 
 export function useSync() {
   const [status, setStatus] = useState<SyncStatus>('idle');
@@ -22,6 +23,7 @@ export function useSync() {
     status,
     lastSyncedAt,
     triggerSync,
-    isSyncing: status === 'syncing'
+    isSyncing: status === 'syncing',
+    isDevMode: isDevMode()
   };
 }

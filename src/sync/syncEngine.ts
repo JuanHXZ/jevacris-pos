@@ -1,13 +1,13 @@
-import { db } from '../db';
+import { db, isDevMode } from '../db';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import type { Sale, SaleItem } from '../types';
 
-export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error';
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error' | 'dev_mode' | 'unconfigured';
 
 type SyncListener = (status: SyncStatus, lastSyncedAt?: Date) => void;
 
 class SyncEngine {
-  private status: SyncStatus = 'idle';
+  private status: SyncStatus = isDevMode() ? 'dev_mode' : (!isSupabaseConfigured ? 'unconfigured' : 'idle');
   private lastSyncedAt: Date | null = null;
   private listeners: Set<SyncListener> = new Set();
   private syncInterval: number | null = null;
@@ -16,8 +16,12 @@ class SyncEngine {
   constructor() {
     // Escuchar cambios de conectividad
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => this.sync());
-      window.addEventListener('offline', () => this.setStatus('offline'));
+      window.addEventListener('online', () => {
+        if (!isDevMode()) this.sync();
+      });
+      window.addEventListener('offline', () => {
+        if (!isDevMode()) this.setStatus('offline');
+      });
     }
   }
 
@@ -33,6 +37,14 @@ class SyncEngine {
   }
 
   public startPeriodicSync(intervalMs = 30000) {
+    if (isDevMode()) {
+      this.setStatus('dev_mode');
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      this.setStatus('unconfigured');
+      return;
+    }
     if (this.syncInterval) clearInterval(this.syncInterval);
     this.sync(); // Sincronización inicial
     this.syncInterval = window.setInterval(() => {
@@ -48,7 +60,18 @@ class SyncEngine {
   }
 
   public async sync(): Promise<void> {
-    if (!isSupabaseConfigured || !supabase || !navigator.onLine || this.isSyncRunning) {
+    if (isDevMode()) {
+      console.info('[Modo Desarrollador] Sincronización con Supabase bloqueada para proteger la data de producción.');
+      this.setStatus('dev_mode');
+      return;
+    }
+
+    if (!isSupabaseConfigured || !supabase) {
+      this.setStatus('unconfigured');
+      return;
+    }
+
+    if (!navigator.onLine || this.isSyncRunning) {
       if (!navigator.onLine) this.setStatus('offline');
       return;
     }

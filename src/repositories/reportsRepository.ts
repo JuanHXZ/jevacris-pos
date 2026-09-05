@@ -1,5 +1,5 @@
 import { db } from '../db';
-import type { DailySummary, ExternalEarning } from '../types';
+import type { DailySummary, ExternalEarning, Sale, SaleItem } from '../types';
 
 export interface WeeklyDayData {
   dayName: string;
@@ -126,5 +126,30 @@ export const reportsRepository = {
   async getExternalEarningsByDate(dateString?: string): Promise<ExternalEarning[]> {
     const targetDate = dateString || new Date().toISOString().split('T')[0];
     return await db.externalEarnings.where('earningDate').equals(targetDate).toArray();
+  },
+
+  async getDayTransactions(dateString?: string): Promise<Sale[]> {
+    const targetDate = dateString || new Date().toISOString().split('T')[0];
+    const allSales = await db.sales.toArray();
+    const daySales = allSales
+      .filter((s) => s.saleDate.startsWith(targetDate))
+      .sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
+
+    const daySaleIds = new Set(daySales.map((s) => s.id));
+    const allSaleItems = await db.saleItems.toArray();
+    const daySaleItems = allSaleItems.filter((item) => daySaleIds.has(item.saleId));
+
+    const itemsBySaleId = new Map<string, SaleItem[]>();
+    for (const item of daySaleItems) {
+      if (!itemsBySaleId.has(item.saleId)) {
+        itemsBySaleId.set(item.saleId, []);
+      }
+      itemsBySaleId.get(item.saleId)!.push(item);
+    }
+
+    return daySales.map((s) => ({
+      ...s,
+      items: itemsBySaleId.get(s.id) || s.items || []
+    }));
   }
 };

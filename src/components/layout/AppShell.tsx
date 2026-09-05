@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   ShoppingCart,
   Package,
@@ -9,10 +9,14 @@ import {
   RefreshCw,
   AlertCircle,
   Lock,
-  KeyRound
+  KeyRound,
+  Terminal,
+  CloudOff
 } from 'lucide-react';
 import { useSync } from '../../hooks/useSync';
 import { SideNavBar } from './SideNavBar';
+import { isDevMode, setDevMode } from '../../db';
+import { DevModeBanner } from '../dev/DevModeBanner';
 
 export type TabId = 'pos' | 'inventory' | 'stock' | 'reports';
 
@@ -34,6 +38,25 @@ export const AppShell: React.FC<AppShellProps> = ({
   children
 }) => {
   const { status, lastSyncedAt, triggerSync, isSyncing } = useSync();
+  const devActive = isDevMode();
+
+  // Atajo de teclado Alt + D para alternar Modo Desarrollador
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        const currentlyDev = isDevMode();
+        const msg = currentlyDev
+          ? '¿Deseas salir del Modo Desarrollador y volver a Producción?\n\nSe restaurará la base de datos real del negocio y la sincronización con Supabase.'
+          : '¿Deseas activar el Modo Desarrollador (Sandbox)?\n\nSe usará una base de datos local aislada y se DESACTIVARÁ la sincronización con Supabase para que tus pruebas no afecten a los clientes.';
+        if (window.confirm(msg)) {
+          setDevMode(!currentlyDev);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const navItems = [
     { id: 'pos' as TabId, label: 'Venta Rápida', icon: ShoppingCart },
@@ -44,6 +67,22 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   const getSyncBadge = () => {
     switch (status) {
+      case 'unconfigured':
+        return {
+          icon: <CloudOff size={14} />,
+          label: 'Falta Conectar Nube (Vercel)',
+          bg: 'rgba(239, 68, 68, 0.12)',
+          color: '#dc2626',
+          border: 'rgba(239, 68, 68, 0.35)'
+        };
+      case 'dev_mode':
+        return {
+          icon: <Terminal size={14} />,
+          label: 'Sandbox Dev (Sin Nube)',
+          bg: 'rgba(245, 158, 11, 0.15)',
+          color: '#d97706',
+          border: 'rgba(245, 158, 11, 0.4)'
+        };
       case 'syncing':
         return {
           icon: <RefreshCw size={14} className="animate-spin" />,
@@ -84,114 +123,174 @@ export const AppShell: React.FC<AppShellProps> = ({
   const badge = getSyncBadge();
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
-      {/* Desktop SideNavBar Component from Figma */}
-      <SideNavBar
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        onNewSale={() => onTabChange('pos')}
-        onOpenSettings={onOpenPinSettings}
-      />
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', backgroundColor: 'var(--bg-app)' }}>
+      {/* Banner de Modo Desarrollador Sandbox */}
+      {devActive && <DevModeBanner />}
 
-      {/* Main Content Area + Top Header */}
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-        {/* Top Header */}
-        <header
-          style={{
-            height: '64px',
-            backgroundColor: 'transparent',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: '12px',
-            padding: '0 32px',
-            position: 'sticky',
-            top: 0,
-            zIndex: 100
-          }}
-        >
-          {/* Botón Bloqueo Rápido / Configuración PIN */}
-          {isPinConfigured ? (
-            <button
-              onClick={onLock}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '12px',
-                fontWeight: 600,
-                backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                color: 'var(--accent-danger)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              title="Bloquear terminal inmediatamente (Atajo: Alt + L)"
-            >
-              <Lock size={14} />
-              <span>Bloquear</span>
-              <kbd
-                style={{
-                  fontSize: '10px',
-                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                  padding: '1px 5px',
-                  borderRadius: '3px',
-                  fontWeight: 700
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        {/* Desktop SideNavBar Component from Figma */}
+        <SideNavBar
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          onNewSale={() => onTabChange('pos')}
+          onOpenSettings={onOpenPinSettings}
+        />
+
+        {/* Main Content Area + Top Header */}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          {/* Top Header */}
+          <header
+            style={{
+              height: '64px',
+              backgroundColor: 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '12px',
+              padding: '0 32px',
+              position: 'sticky',
+              top: 0,
+              zIndex: 100
+            }}
+          >
+            {/* Botón Alternar Modo Desarrollador */}
+            {!devActive ? (
+              <button
+                onClick={() => {
+                  const msg = '¿Deseas activar el Modo Desarrollador (Sandbox)?\n\nSe cargará una base de datos de prueba aislada y se desconectará la nube de Supabase para que ninguna venta o cambio de prueba afecte a los clientes.';
+                  if (window.confirm(msg)) setDevMode(true);
                 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(245, 158, 11, 0.08)',
+                  color: '#b45309',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Activar Modo Desarrollador para hacer pruebas aisladas (Atajo: Alt + D)"
               >
-                Alt+L
-              </kbd>
-            </button>
-          ) : (
-            <button
-              onClick={onOpenPinSettings}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '12px',
-                fontWeight: 600,
-                backgroundColor: 'var(--bg-card-secondary)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border-default)',
-                cursor: 'pointer'
-              }}
-              title="Configurar PIN de seguridad para proteger el terminal"
-            >
-              <KeyRound size={14} />
-              <span>Configurar PIN</span>
-            </button>
-          )}
+                <Terminal size={14} />
+                <span>Modo Dev</span>
+                <kbd
+                  style={{
+                    fontSize: '10px',
+                    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    fontWeight: 700
+                  }}
+                >
+                  Alt+D
+                </kbd>
+              </button>
+            ) : null}
 
-          {/* Sync Status Button & Indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              onClick={() => triggerSync()}
-              disabled={isSyncing}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '12px',
-                fontWeight: 600,
-                backgroundColor: badge.bg,
-                color: badge.color,
-                border: `1px solid ${badge.border}`,
-                cursor: 'pointer'
-              }}
-              title="Click para sincronizar ahora con Supabase"
-            >
-              {badge.icon}
-              <span>{badge.label}</span>
-            </button>
-          </div>
-        </header>
+            {/* Botón Bloqueo Rápido / Configuración PIN */}
+            {isPinConfigured ? (
+              <button
+                onClick={onLock}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  color: 'var(--accent-danger)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Bloquear terminal inmediatamente (Atajo: Alt + L)"
+              >
+                <Lock size={14} />
+                <span>Bloquear</span>
+                <kbd
+                  style={{
+                    fontSize: '10px',
+                    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    fontWeight: 700
+                  }}
+                >
+                  Alt+L
+                </kbd>
+              </button>
+            ) : (
+              <button
+                onClick={onOpenPinSettings}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: 'var(--bg-card-secondary)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-default)',
+                  cursor: 'pointer'
+                }}
+                title="Configurar PIN de seguridad para proteger el terminal"
+              >
+                <KeyRound size={14} />
+                <span>Configurar PIN</span>
+              </button>
+            )}
+
+            {/* Sync Status Button & Indicator */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  if (status === 'unconfigured') {
+                    alert(
+                      'Para activar la sincronización en Vercel necesitas agregar las variables de entorno de Supabase:\n\n' +
+                      '1. Ve a tu proyecto en vercel.com > Settings > Environment Variables\n' +
+                      '2. Agrega VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY con tus credenciales de Supabase\n' +
+                      '3. Realiza un Redeploy para aplicar los cambios.'
+                    );
+                    return;
+                  }
+                  if (!devActive) triggerSync();
+                }}
+                disabled={isSyncing || devActive}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: badge.bg,
+                  color: badge.color,
+                  border: `1px solid ${badge.border}`,
+                  cursor: devActive ? 'default' : 'pointer'
+                }}
+                title={
+                  devActive
+                    ? 'Modo Desarrollador: Sincronización con Supabase deshabilitada para proteger la data de producción'
+                    : status === 'unconfigured'
+                    ? 'Click para ver cómo configurar Supabase en Vercel'
+                    : 'Click para sincronizar ahora con Supabase'
+                }
+              >
+                {badge.icon}
+                <span>{badge.label}</span>
+              </button>
+            </div>
+          </header>
 
         {/* Dynamic Page Content */}
         <main
@@ -204,6 +303,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         >
           {children}
         </main>
+      </div>
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
