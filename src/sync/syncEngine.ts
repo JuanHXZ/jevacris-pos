@@ -111,7 +111,7 @@ class SyncEngine {
     if (!supabase) return;
 
     // Subir pendientes locales
-    const unsynced = await db.categories.where('synced').equals(0).toArray();
+    const unsynced = await db.categories.filter(c => !c.synced).toArray();
     if (unsynced.length > 0) {
       const payload = unsynced.map(c => ({
         id: c.id,
@@ -151,7 +151,7 @@ class SyncEngine {
     if (!supabase) return;
 
     // Subir pendientes locales
-    const unsynced = await db.products.where('synced').equals(0).toArray();
+    const unsynced = await db.products.filter(p => !p.synced).toArray();
     if (unsynced.length > 0) {
       const payload = unsynced.map(p => ({
         id: p.id,
@@ -207,7 +207,7 @@ class SyncEngine {
     if (!supabase) return;
 
     // Subir ventas no sincronizadas
-    const unsyncedSales = await db.sales.where('synced').equals(0).toArray();
+    const unsyncedSales = await db.sales.filter(s => !s.synced).toArray();
     if (unsyncedSales.length > 0) {
       for (const sale of unsyncedSales) {
         const items = await db.saleItems.where('saleId').equals(sale.id).toArray();
@@ -293,7 +293,7 @@ class SyncEngine {
   private async syncStockEntries() {
     if (!supabase) return;
 
-    const unsynced = await db.stockEntries.where('synced').equals(0).toArray();
+    const unsynced = await db.stockEntries.filter(e => !e.synced).toArray();
     if (unsynced.length > 0) {
       const payload = unsynced.map(e => ({
         id: e.id,
@@ -339,7 +339,7 @@ class SyncEngine {
   private async syncExternalEarnings() {
     if (!supabase) return;
 
-    const unsynced = await db.externalEarnings.where('synced').equals(0).toArray();
+    const unsynced = await db.externalEarnings.filter(e => !e.synced).toArray();
     if (unsynced.length > 0) {
       const payload = unsynced.map(e => ({
         id: e.id,

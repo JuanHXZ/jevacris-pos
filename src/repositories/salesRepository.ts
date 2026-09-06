@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { syncEngine } from '../sync/syncEngine';
 import type { Sale, SaleItem, CartItem, PaymentMethod } from '../types';
 
 export const salesRepository = {
@@ -71,6 +72,9 @@ export const salesRepository = {
         }
       }
     });
+
+    // Disparar sincronización inmediata con Supabase en segundo plano
+    syncEngine.sync().catch(err => console.warn('[SalesSync] Auto-sync falló:', err));
 
     return newSale;
   },
