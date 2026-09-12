@@ -5,6 +5,7 @@ import {
   ArrowDownToLine,
   BarChart3,
   Plus,
+  Wallet,
   Settings
 } from 'lucide-react';
 import { TabId } from './AppShell';
@@ -37,6 +38,11 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
       id: 'stock' as TabId,
       label: 'Entradas de Stock',
       icon: ArrowDownToLine
+    },
+    {
+      id: 'cash' as TabId,
+      label: 'Mis cajas',
+      icon: Wallet
     },
     {
       id: 'reports' as TabId,

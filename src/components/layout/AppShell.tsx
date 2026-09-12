@@ -4,6 +4,7 @@ import {
   Package,
   ArrowDownToLine,
   BarChart3,
+  Wallet,
   Wifi,
   WifiOff,
   RefreshCw,
@@ -11,14 +12,15 @@ import {
   Lock,
   KeyRound,
   Terminal,
-  CloudOff
+  CloudOff,
+  CircleDollarSign
 } from 'lucide-react';
 import { useSync } from '../../hooks/useSync';
 import { SideNavBar } from './SideNavBar';
 import { isDevMode, setDevMode } from '../../db';
 import { DevModeBanner } from '../dev/DevModeBanner';
 
-export type TabId = 'pos' | 'inventory' | 'stock' | 'reports';
+export type TabId = 'pos' | 'inventory' | 'stock' | 'cash' | 'reports';
 
 interface AppShellProps {
   activeTab: TabId;
@@ -26,6 +28,8 @@ interface AppShellProps {
   isPinConfigured?: boolean;
   onLock?: () => void;
   onOpenPinSettings?: () => void;
+  hasOpenCashSession?: boolean;
+  onCloseCashSession?: () => void;
   children: React.ReactNode;
 }
 
@@ -35,6 +39,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   isPinConfigured = false,
   onLock,
   onOpenPinSettings,
+  hasOpenCashSession = false,
+  onCloseCashSession,
   children
 }) => {
   const { status, lastSyncedAt, triggerSync, isSyncing } = useSync();
@@ -62,6 +68,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     { id: 'pos' as TabId, label: 'Venta Rápida', icon: ShoppingCart },
     { id: 'inventory' as TabId, label: 'Inventario', icon: Package },
     { id: 'stock' as TabId, label: 'Entradas', icon: ArrowDownToLine },
+    { id: 'cash' as TabId, label: 'Cajas', icon: Wallet },
     { id: 'reports' as TabId, label: 'Caja & Reportes', icon: BarChart3 }
   ];
 
@@ -191,6 +198,30 @@ export const AppShell: React.FC<AppShellProps> = ({
                 </kbd>
               </button>
             ) : null}
+
+            {hasOpenCashSession && (
+              <button
+                onClick={onCloseCashSession}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: 'rgba(49, 3, 68, 0.08)',
+                  color: '#310344',
+                  border: '1px solid rgba(49, 3, 68, 0.22)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Cerrar la jornada y realizar el arqueo de caja"
+              >
+                <CircleDollarSign size={14} />
+                <span>Cerrar caja</span>
+              </button>
+            )}
 
             {/* Botón Bloqueo Rápido / Configuración PIN */}
             {isPinConfigured ? (

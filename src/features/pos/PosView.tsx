@@ -15,8 +15,9 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { db } from '../../db';
-import { salesRepository } from '../../repositories/salesRepository';
+import { salesRepository, NoOpenSessionError } from '../../repositories/salesRepository';
 import { Modal } from '../../components/ui/Modal';
+import { CashSessionModal } from '../cash/components/CashSessionModal';
 import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/currency';
 import type { Product, CartItem, PaymentMethod } from '../../types';
 
@@ -56,6 +57,7 @@ export const PosView: React.FC = () => {
 
   // Estado para Modal de Venta Fraccionada (Por Dinero vs Por Volumen)
   const [fractionalModalOpen, setFractionalModalOpen] = useState(false);
+  const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [selectedBulkProduct, setSelectedBulkProduct] = useState<Product | null>(null);
   const [fractionalMode, setFractionalMode] = useState<'money' | 'quantity'>('money');
   const [moneyAmountRaw, setMoneyAmountRaw] = useState<string>('2000');
@@ -66,6 +68,8 @@ export const PosView: React.FC = () => {
   const products = useLiveQuery(() =>
     db.products.filter((p) => p.isActive !== false).toArray()
   ) || [];
+  const openSession = useLiveQuery(() => db.cashSessions.filter((s) => s.status === 'open').first());
+  const hasOpenSession = Boolean(openSession);
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -184,6 +188,10 @@ export const PosView: React.FC = () => {
 
   const handleConfirmSale = async () => {
     if (cart.length === 0) return;
+    if (!hasOpenSession) {
+      setSessionModalOpen(true);
+      return;
+    }
 
     try {
       const receivedVal = paymentMethod === 'cash' ? (numReceived || cartTotal) : cartTotal;
@@ -202,7 +210,11 @@ export const PosView: React.FC = () => {
       }, 4500);
     } catch (error) {
       console.error('Error al procesar la venta:', error);
-      alert('Error al registrar la venta');
+      if (error instanceof NoOpenSessionError) {
+        setSessionModalOpen(true);
+        return;
+      }
+      alert(error instanceof Error ? error.message : 'Error al registrar la venta');
     }
   };
 
@@ -676,6 +688,43 @@ export const PosView: React.FC = () => {
           )}
         </div>
 
+        {!hasOpenSession && (
+          <div
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              backgroundColor: '#fff4e5',
+              border: '1px solid #f5c16c',
+              borderRadius: '20px',
+              padding: '12px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px'
+            }}
+          >
+            <span style={{ fontSize: '13px', color: '#7c4a03', fontWeight: 600 }}>
+              Abre caja para poder vender
+            </span>
+            <button
+              type="button"
+              onClick={() => setSessionModalOpen(true)}
+              style={{
+                border: 'none',
+                backgroundColor: '#310344',
+                color: '#fff',
+                borderRadius: '999px',
+                padding: '8px 12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              Abrir caja
+            </button>
+          </div>
+        )}
+
         {/* Lista de Ítems en el Carrito */}
         <div
           style={{
@@ -1052,31 +1101,31 @@ export const PosView: React.FC = () => {
           {/* Botón Principal: Confirmar Venta */}
           <button
             onClick={handleConfirmSale}
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || !hasOpenSession}
             style={{
-              backgroundColor: cart.length > 0 ? '#010001' : '#e6e0eb',
-              color: cart.length > 0 ? '#ffffff' : '#7e747f',
+              backgroundColor: cart.length > 0 && hasOpenSession ? '#010001' : '#e6e0eb',
+              color: cart.length > 0 && hasOpenSession ? '#ffffff' : '#7e747f',
               border: 'none',
               borderRadius: '48px',
               padding: '18px 24px',
               fontSize: '18px',
               fontWeight: 700,
-              cursor: cart.length > 0 ? 'pointer' : 'not-allowed',
+              cursor: cart.length > 0 && hasOpenSession ? 'pointer' : 'not-allowed',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '10px',
-              boxShadow: cart.length > 0 ? '0 12px 32px rgba(49, 3, 68, 0.25)' : 'none',
+              boxShadow: cart.length > 0 && hasOpenSession ? '0 12px 32px rgba(49, 3, 68, 0.25)' : 'none',
               transition: 'transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease'
             }}
             onMouseDown={(e) => {
-              if (cart.length > 0) e.currentTarget.style.transform = 'scale(0.98)';
+              if (cart.length > 0 && hasOpenSession) e.currentTarget.style.transform = 'scale(0.98)';
             }}
             onMouseUp={(e) => {
-              if (cart.length > 0) e.currentTarget.style.transform = 'scale(1)';
+              if (cart.length > 0 && hasOpenSession) e.currentTarget.style.transform = 'scale(1)';
             }}
           >
-            <span>Confirmar Venta</span>
+            <span>{hasOpenSession ? 'Confirmar Venta' : 'Abre caja para vender'}</span>
             <CheckCircle2 size={20} />
           </button>
         </div>
@@ -1399,6 +1448,7 @@ export const PosView: React.FC = () => {
           </div>
         )}
       </Modal>
+      <CashSessionModal isOpen={sessionModalOpen} onClose={() => setSessionModalOpen(false)} />
     </div>
   );
 };

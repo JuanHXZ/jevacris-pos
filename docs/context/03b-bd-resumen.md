@@ -20,7 +20,7 @@
   - `id` (TEXT, PK): Identificador único (UUID).
   - `name` (TEXT, NOT NULL): Nombre del producto (ej. "Jabón Rey 300g", "Suavizante 1L", "Recarga Claro").
   - `category_id` (TEXT, FK): Referencia a `categories(id)`.
-  - `cash_register_id` (TEXT, FK Opcional): Referencia a `cash_registers(id)` (Fase 2).
+  - `cash_register_id` (TEXT, FK, NOT NULL tras RF27): Referencia a `cash_registers(id)`. Por defecto la **Caja Principal**.
   - `type` (TEXT, NOT NULL): `'physical'` (descuenta inventario) o `'service'` (no descuenta inventario).
   - `unit` (TEXT, NOT NULL): Unidad de venta (ej. "unidad", "litro", "barra", "bolsa", "recarga").
   - `cost_price` (REAL, DEFAULT 0): Costo de adquisición unitario.
@@ -39,6 +39,7 @@
   - `payment_method` (TEXT, NOT NULL): `'cash'` (Efectivo) o `'transfer'` (Transferencia Nequi / Bancolombia).
   - `amount_received` (REAL, DEFAULT 0): Dinero entregado por el cliente (para cálculo de cambio en efectivo).
   - `change_given` (REAL, DEFAULT 0): Vueltas/cambio devuelto al cliente.
+  - `cash_session_id` (TEXT, FK Opcional): Referencia a `cash_sessions(id)` — **requerida al confirmar venta cuando RF22 esté activo** (sesión abierta). Ventas históricas previas a RF22 pueden quedar en `NULL`.
   - `notes` (TEXT, Opcional).
   - `created_at`, `updated_at` (TIMESTAMP WITH TIME ZONE).
 
@@ -55,6 +56,7 @@
   - `profit` (REAL): **Cálculo estricto de ganancia:**
     - Para `physical`: `quantity * (unit_price - unit_cost)`.
     - Para `service`: **Siempre se almacena en 0** (las ganancias de servicios se liquidan externamente y se registran en `external_earnings`).
+  - `cash_register_id` (TEXT, FK): Snapshot de la caja del producto al confirmar la venta (RF27). El histórico no se mueve si luego se reasigna el producto.
   - `created_at` (TIMESTAMP WITH TIME ZONE).
 
 - **`stock_entries` (Entradas de mercancía / Compras a proveedores)**
@@ -78,27 +80,55 @@
 
 ---
 
-## Modelo de Entidades Previstas para Fase 2
+## Modelo de Entidades Previstas para Fase 2 (slice cajas: RF22 + RF27 + RF28)
 
-1. **`cash_registers` (Cajas de Facturación / Fondos de Dinero Independientes — RF27 / ADR-011):**
-   - `id` (TEXT, PK): Identificador único.
-   - `name` (TEXT, NOT NULL): Nombre de la caja (ej. "Caja Aseo", "Caja Dulces/Mecato", "Caja Servicios").
-   - `description` (TEXT).
-   - `is_active` (INTEGER DEFAULT 1).
-   - `created_at`, `updated_at` (TIMESTAMP WITH TIME ZONE).
+Hay **dos conceptos distintos**:
+- **Sesión POS** (`cash_sessions`): jornada / gaveta física. Una abierta a la vez.
+- **Fondo / caja de facturación** (`cash_registers`): a qué línea de negocio pertenece cada producto (Principal, Dulces, …).
 
-2. **`distribution_settings` (Configuración de Porcentajes de Distribución — RF28 / ADR-009):**
-   - `id` (TEXT, PK): Identificador (o registro único `singleton`).
-   - `reinvestment_percentage` (REAL DEFAULT 60): % destinado a recompra de mercancía.
-   - `operating_expenses_percentage` (REAL DEFAULT 30): % destinado a arriendo y servicios públicos.
-   - `personal_savings_percentage` (REAL DEFAULT 10): % destinado a fondo personal / imprevistos / ahorro.
-   - `updated_at` (TIMESTAMP WITH TIME ZONE).
+### RF22 — Sesión de jornada
 
-3. **`cash_sessions` (Apertura y Cierre de Caja / Arqueo — RF22):**
-   - `id` (TEXT, PK), `cash_register_id` (TEXT, FK), `opened_at`, `closed_at`, `opening_cash`, `closing_cash_calculated`, `closing_cash_counted`, `difference`, `status` ('open', 'closed').
+1. **`cash_sessions` (Apertura y Cierre / Arqueo — RF22 / ADR-012):**
+   - `id` (TEXT, PK), `opened_at` (NOT NULL), `closed_at` (NULL si abierta).
+   - `opening_cash`, `closing_cash_calculated`, `closing_cash_counted`, `difference`.
+   - `status` `'open'` | `'closed'`.
+   - `notes`, `created_at`, `updated_at`.
+   - **Restricción:** como máximo una fila `status = 'open'`. **No** tiene `cash_register_id` (el arqueo es de la gaveta, no del fondo).
 
-4. **`expenses` (Gastos Operativos del Negocio — RF22):**
-   - `id` (TEXT, PK), `cash_session_id` (TEXT, FK), `category` ('rent', 'utilities', 'supplies', 'personal_draw', 'other'), `amount`, `description`, `expense_date`.
+2. **`expenses` (Gastos de la jornada — RF22):**
+   - `id`, `cash_session_id` (FK NOT NULL), `category` (`'rent'` | `'utilities'` | `'supplies'` | `'personal_draw'` | `'other'`), `amount`, `description`, `expense_date`, timestamps.
+
+**Fórmula de arqueo (efectivo esperado):**
+```text
+closing_cash_calculated =
+  opening_cash
+  + Σ sales.total_amount WHERE payment_method = 'cash' AND cash_session_id = :session
+  − Σ expenses.amount WHERE cash_session_id = :session
+```
+
+### RF27 / RF28 — Fondos y distribución
+
+3. **`cash_registers` (Cajas de facturación — RF27 / ADR-011):**
+   - `id` (TEXT, PK).
+   - `name` (TEXT, NOT NULL): ej. «Caja Principal», «Caja Dulces».
+   - `description` (TEXT, Opcional).
+   - `is_principal` (INTEGER/BOOLEAN, NOT NULL, DEFAULT 0): **exactamente una** fila en `true`. No se elimina.
+   - `is_active` (INTEGER DEFAULT 1): las no principales se pueden desactivar si no se usan; no se desactiva la Principal.
+   - `created_at`, `updated_at`.
+   - **Seed / migración:** crear Caja Principal y `UPDATE products SET cash_register_id = :principal WHERE cash_register_id IS NULL`.
+
+4. **`cash_register_distribution_lines` (Distribución por caja — RF28 / ADR-009):**
+   - `id` (TEXT, PK).
+   - `cash_register_id` (TEXT, FK NOT NULL).
+   - `label` (TEXT, NOT NULL): nombre del rubro (ej. «Inversiones», «Ahorros», «Gastos operativos»).
+   - `percentage` (REAL, NOT NULL): 0–100.
+   - `sort_order` (INTEGER, DEFAULT 0).
+   - `created_at`, `updated_at`.
+   - **Invariante:** Σ `percentage` por `cash_register_id` = 100.
+   - **Ejemplo Caja Dulces:** Inversiones 60, Ahorros 40.
+   - **Default Caja Principal (sugerido, editable):** Reinversión 60, Gastos operativos 30, Ahorro 10.
+
+El singleton global `distribution_settings` **queda descartado** (ya no hay un único 60/30/10 para todo el negocio).
 
 5. **`debts`, `debt_items`, `debt_payments` (Módulo de Fiados — RF18):**
    - `debts`: `id`, `debtor_name`, `total_amount`, `paid_amount`, `status` ('pending', 'partial', 'paid'), `created_at`.
@@ -116,20 +146,29 @@
 - `sales` 1 --- N `sale_items`
 - `products` 1 --- N `sale_items`
 - `products` 1 --- N `stock_entries`
-- `cash_registers` 1 --- N `products` (Fase 2)
-- `cash_registers` 1 --- N `cash_sessions` (Fase 2)
+- `cash_sessions` 1 --- N `sales` (RF22)
+- `cash_sessions` 1 --- N `expenses` (RF22)
+- `cash_registers` 1 --- N `products` (RF27)
+- `cash_registers` 1 --- N `sale_items` (RF27, snapshot)
+- `cash_registers` 1 --- N `cash_register_distribution_lines` (RF28)
 
 ---
 
 ## Lógica automática activa (Triggers / Cascada de aplicación)
 
 1. **Al confirmar venta (`sales` + `sale_items`):**
-   - Para cada item donde `product_type == 'physical'`, se descuenta inventario:
-     `UPDATE products SET current_stock = current_stock - item.quantity, updated_at = CURRENT_TIMESTAMP WHERE id = item.product_id;`
-   - Para items donde `product_type == 'service'`, NO se descuenta inventario y `profit` se fija en `0`.
+   - **Gate RF22:** Debe existir una `cash_session` con `status = 'open'`; la venta se graba con ese `cash_session_id`. Si no hay sesión abierta, se rechaza.
+   - **Snapshot RF27:** cada ítem copia `cash_register_id` del producto (o Principal si faltara).
+   - Para cada item donde `product_type == 'physical'`, se descuenta inventario.
+   - Para `service`, NO se descuenta inventario y `profit` se fija en `0`.
 2. **Al registrar entrada de mercancía (`stock_entries`):**
    - Se incrementa el inventario y se actualiza el costo base:
      `UPDATE products SET current_stock = current_stock + entry.quantity, cost_price = CASE WHEN entry.unit_cost > 0 THEN entry.unit_cost ELSE cost_price END, updated_at = CURRENT_TIMESTAMP WHERE id = entry.product_id;`
+3. **Al abrir caja (`cash_sessions`):**
+   - Solo si no existe otra sesión `open`. Se crea con `opening_cash`, `status = 'open'`, `closed_at = NULL`.
+4. **Al cerrar caja (`cash_sessions`):**
+   - Se calcula `closing_cash_calculated` (fórmula arriba), se registra `closing_cash_counted`, `difference`, `closed_at` y `status = 'closed'`.
+   - A partir de ese momento el POS no acepta ventas hasta una nueva apertura.
 
 ---
 
@@ -198,16 +237,66 @@ SELECT
     ) AS ganancia_total_consolidada;
 ```
 
-### 4. Cálculo de Distribución de Ventas Configurable (RF28 / ADR-009)
+### 4. Totales y distribución por caja de facturación (RF27 / RF28 / ADR-009)
 ```sql
--- Distribución dinámica usando los porcentajes configurados por el usuario
-SELECT 
-    COALESCE(SUM(s.total_amount), 0) AS total_ventas_dia,
-    COALESCE(SUM(s.total_amount), 0) * (cfg.reinvestment_percentage / 100.0) AS fondo_reinversion_mercancia,
-    COALESCE(SUM(s.total_amount), 0) * (cfg.operating_expenses_percentage / 100.0) AS fondo_gastos_operativos,
-    COALESCE(SUM(s.total_amount), 0) * (cfg.personal_savings_percentage / 100.0) AS fondo_personal_ahorro
-FROM sales s
-CROSS JOIN distribution_settings cfg
-WHERE DATE(s.sale_date) = :target_date
-GROUP BY cfg.reinvestment_percentage, cfg.operating_expenses_percentage, cfg.personal_savings_percentage;
+-- Total ventas y ganancias por caja en un período
+SELECT
+    cr.id,
+    cr.name,
+    cr.is_principal,
+    COALESCE(SUM(si.subtotal), 0) AS total_ventas,
+    COALESCE(SUM(si.profit), 0) AS total_ganancias
+FROM cash_registers cr
+LEFT JOIN sale_items si ON si.cash_register_id = cr.id
+LEFT JOIN sales s ON s.id = si.sale_id AND DATE(s.sale_date) = :target_date
+GROUP BY cr.id, cr.name, cr.is_principal;
+
+-- Distribución sugerida = % × total ventas de esa caja
+SELECT
+    cr.name AS caja,
+    d.label AS rubro,
+    d.percentage,
+    COALESCE(SUM(si.subtotal), 0) AS total_ventas_caja,
+    COALESCE(SUM(si.subtotal), 0) * (d.percentage / 100.0) AS monto_sugerido
+FROM cash_registers cr
+JOIN cash_register_distribution_lines d ON d.cash_register_id = cr.id
+LEFT JOIN sale_items si ON si.cash_register_id = cr.id
+LEFT JOIN sales s ON s.id = si.sale_id AND DATE(s.sale_date) = :target_date
+WHERE cr.id = :cash_register_id
+GROUP BY cr.name, d.label, d.percentage, d.sort_order
+ORDER BY d.sort_order;
+```
+
+### 5. Arqueo de sesión de caja (RF22 / ADR-012)
+```sql
+-- Efectivo esperado y diferencia para una sesión
+SELECT
+    cs.id AS session_id,
+    cs.opening_cash,
+    COALESCE((
+        SELECT SUM(s.total_amount)
+        FROM sales s
+        WHERE s.cash_session_id = cs.id AND s.payment_method = 'cash'
+    ), 0) AS cash_sales_total,
+    COALESCE((
+        SELECT SUM(e.amount)
+        FROM expenses e
+        WHERE e.cash_session_id = cs.id
+    ), 0) AS expenses_total,
+    cs.opening_cash
+      + COALESCE((
+            SELECT SUM(s.total_amount)
+            FROM sales s
+            WHERE s.cash_session_id = cs.id AND s.payment_method = 'cash'
+        ), 0)
+      - COALESCE((
+            SELECT SUM(e.amount)
+            FROM expenses e
+            WHERE e.cash_session_id = cs.id
+        ), 0) AS closing_cash_calculated,
+    cs.closing_cash_counted,
+    cs.difference,
+    cs.status
+FROM cash_sessions cs
+WHERE cs.id = :session_id;
 ```

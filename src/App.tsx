@@ -1,19 +1,27 @@
 import { useState, useEffect } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell, type TabId } from './components/layout/AppShell';
 import { PosView } from './features/pos/PosView';
 import { InventoryView } from './features/inventory/InventoryView';
 import { StockView } from './features/stock/StockView';
 import { ReportsView } from './features/reports/ReportsView';
-import { seedInitialDataIfNeeded } from './db';
+import { CashView } from './features/cash/CashView';
+import { db, seedInitialDataIfNeeded } from './db';
 import { syncEngine } from './sync/syncEngine';
 import { usePinLock } from './hooks/usePinLock';
 import { PinLockScreen } from './components/auth/PinLockScreen';
 import { PinSettingsModal } from './components/auth/PinSettingsModal';
+import { CashSessionModal } from './features/cash/components/CashSessionModal';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>('pos');
   const [isInitializing, setIsInitializing] = useState(true);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [isCloseCashModalOpen, setIsCloseCashModalOpen] = useState(false);
+  const openCashSession = useLiveQuery(
+    async () => (await db.cashSessions.filter((session) => session.status === 'open').first()) ?? null,
+    []
+  );
 
   const {
     isPinConfigured,
@@ -95,11 +103,14 @@ export function App() {
         isPinConfigured={isPinConfigured}
         onLock={lock}
         onOpenPinSettings={() => setIsPinModalOpen(true)}
+        hasOpenCashSession={Boolean(openCashSession)}
+        onCloseCashSession={() => setIsCloseCashModalOpen(true)}
       >
         {activeTab === 'pos' && <PosView />}
         {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'stock' && <StockView />}
-        {activeTab === 'reports' && <ReportsView />}
+        {activeTab === 'cash' && <CashView />}
+        {activeTab === 'reports' && <ReportsView onGoToCash={() => setActiveTab('cash')} />}
       </AppShell>
 
       {/* Modal de Configuración y Seguridad de PIN */}
@@ -112,6 +123,24 @@ export function App() {
         onChangePin={changePin}
         onDisablePin={disablePin}
         onUpdateAutoLock={updateAutoLockMinutes}
+      />
+
+      <CashSessionModal
+        isOpen={
+          !isInitializing &&
+          openCashSession === null &&
+          activeTab !== 'reports' &&
+          !(isPinConfigured && isLocked)
+        }
+        onClose={() => undefined}
+        initialMode="open"
+        isDismissible={false}
+      />
+
+      <CashSessionModal
+        isOpen={isCloseCashModalOpen}
+        onClose={() => setIsCloseCashModalOpen(false)}
+        initialMode="close"
       />
     </>
   );

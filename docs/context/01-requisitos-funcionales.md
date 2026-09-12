@@ -52,20 +52,52 @@
 | RF19 | Integración API o importación directa de reportes desde plataformas de corresponsalía | Media | Fase 2 | Automatización adicional sobre el registro manual de ganancias externas del MVP. |
 | RF20 | **Exportación de reportes a Excel / PDF / CSV** y respaldos automáticos en la nube | Media | Fase 2 | Generación de archivos descargables con el detalle de ventas, arqueos y ganancias para contabilidad y archivo histórico. |
 | RF21 | Gestión de múltiples usuarios o turnos de caja | Baja | Fase 2 | El negocio es unipersonal actualmente. |
-| RF22 | **Apertura y cierre de caja (Arqueo)** con registro de gastos operativos varios (arriendo, servicios, imprevistos) | Alta | Fase 2 | Compara el efectivo físico contado al abrir y cerrar contra el cálculo del sistema para detectar faltantes/sobrantes y deducir gastos reales. |
+| RF22 | **Apertura y cierre de jornada POS (Arqueo)** con registro de gastos operativos varios. **Una sesión operativa** (gaveta física). **Bloqueo de ventas** si no hay sesión abierta o tras el cierre. Independiente de los fondos contables (RF27). | Alta | Fase 2 — slice cajas | Compara el efectivo físico contado al abrir y cerrar contra el sistema. Decisiones: ADR-012. Los fondos por línea de producto no multiplican la apertura/cierre. |
 | RF23 | **Bloqueo de acceso por PIN local** | Alta | Fase 2 | Resuelve el acceso seguro sin depender de conexión a internet ni costos de OTP por SMS/WhatsApp (ver ADR-008). |
 | RF24 | **Fotos de productos en el catálogo alojadas en Cloudinary** | Media | Fase 2 | Subida y visualización de imágenes de productos al crear o editar desde el modal de catálogo, almacenadas en Cloudinary con URL guardada en la base de datos (ver ADR-010). |
 | RF25 | **Gestión de proveedores**: alta/edición de proveedores y vinculación opcional al crear productos o registrar entradas de stock | Media | Fase 2 | Permite trazabilidad de compras por proveedor y comparar costos entre distintos distribuidores. |
 | RF26 | **Visualización de detalle completo por día específico y exportación histórica** | Media | Fase 2 | Permite consultar mediante un selector de fecha el reporte exhaustivo de cualquier día pasado (transacciones desglosadas, medios de pago, ganancias, arqueo) y exportarlo a Excel/PDF. |
-| RF27 | **Múltiples Cajas de Facturación / Fondos de Dinero Separados por Línea de Producto**: cajas físicas/contables independientes | Media | Fase 2 | Permite asignar categorías de productos a cajas registradoras o fondos específicos (ej. caja de productos de aseo, caja de dulces/mecato, caja de servicios) para cuadrar y rastrear el dinero por separado, permitiendo a la vez consolidar gastos compartidos. |
-| RF28 | **Módulo de Distribución de Ingresos y Reinversión Configurable**: porcentajes parametrizables por la dueña | Media | Fase 2 | Calcula la distribución sugerida de ventas diarias en: **Reinversión** (compra de mercancía), **Gastos Operativos** (arriendo/servicios) y **Fondo Personal/Ahorro** (caja chica diaria). Los porcentajes (ej. 60/30/10 por defecto) son 100% configurables por la usuaria en los ajustes. |
+| RF27 | **Cajas de facturación (fondos contables):** siempre existe **Caja Principal**; se pueden crear más (ej. Caja Dulces). Cada producto se asigna a **una** caja. Cada caja muestra **total ventas** y **total ganancias**. | Alta | Fase 2 — slice cajas | La Principal se crea automáticamente y se asigna a todos los productos actuales. RF27 ya no queda diferido. Ver RN-C01…RN-C09 y ADR-011. |
+| RF28 | **Distribución de ingresos por caja:** cada caja tiene sus propios rubros y porcentajes (suma 100%). Ej. Caja Dulces: 60% inversiones / 40% ahorros. | Alta | Fase 2 — slice cajas | Deja de ser un único 60/30/10 global. La distribución se calcula sobre el **total de ventas de esa caja**. Ver ADR-009. |
+
+### Reglas de negocio RF22 (Apertura / Cierre de jornada POS — validadas)
+
+La **sesión** es la jornada del mostrador (una gaveta física). Los **fondos** (Caja Principal, Caja Dulces, …) son contables y se rigen por RF27/RF28.
+
+| # | Regla | Detalle |
+|---|-------|---------|
+| RN-01 | **Sesión única abierta** | En todo el sistema solo puede existir **una** `cash_session` con `status = 'open'` a la vez. No se abre/cierra una sesión por cada fondo. |
+| RN-02 | **Apertura obligatoria** | Para vender se requiere una sesión abierta. Si no hay ninguna abierta, el POS **bloquea cobros** y exige apertura con monto base (`opening_cash`). |
+| RN-03 | **Cierre bloquea ventas** | Tras cerrar (`status = 'closed'`), no hay nuevas ventas hasta una nueva apertura. |
+| RN-04 | **Duración de la sesión** | Permanece abierta hasta el cierre explícito, aunque cruce medianoche. |
+| RN-05 | **Ventas ligadas a la sesión** | Toda venta confirmada se asocia a `sales.cash_session_id` de la sesión activa. |
+| RN-06 | **Gastos en sesión** | Los gastos operativos se registran contra la sesión (efectivo de la gaveta) y se descuentan del arqueo. |
+| RN-07 | **Efectivo esperado al cierre** | `closing_cash_calculated = opening_cash + Σ(ventas cash.total_amount) − Σ(gastos de la sesión)`. Las transferencias no suman a la gaveta. |
+| RN-08 | **Diferencia de arqueo** | `difference = closing_cash_counted − closing_cash_calculated` (positivo = sobrante, negativo = faltante). |
+| RN-09 | **Alcance de este slice** | RF22 + RF27 + RF28 van juntos. Fuera: RF21 (turnos), RF20/RF26 (exportación). |
+
+### Reglas de negocio RF27 / RF28 (Fondos y distribución — validadas)
+
+| # | Regla | Detalle |
+|---|-------|---------|
+| RN-C01 | **Caja Principal siempre existe** | Al activar la feature se crea (o se garantiza) un registro `cash_registers` con `is_principal = true`. No se puede eliminar ni desactivar. |
+| RN-C02 | **Asignación automática del catálogo actual** | Todos los productos existentes sin caja, o con caja nula, quedan en la Caja Principal. |
+| RN-C03 | **Cajas adicionales** | La dueña puede crear más fondos (ej. «Caja Dulces»). Cada una tiene nombre, estado activo y su propia distribución. |
+| RN-C04 | **Un producto → una caja** | Al crear o editar un producto se elige **una** caja de facturación. Por defecto: Principal. No se reparte un mismo SKU entre varias cajas. |
+| RN-C05 | **Snapshot en la venta** | Cada `sale_item` guarda `cash_register_id` al confirmar. Reasignar un producto después **no** mueve el histórico. |
+| RN-C06 | **Totales por caja** | Por caja (y por período): **total ventas** = Σ `sale_items.subtotal`; **total ganancias** = Σ `sale_items.profit` (servicios siguen en 0; ganancias externas no entran al fondo del producto). |
+| RN-C07 | **Distribución por caja** | Cada caja tiene N rubros con porcentaje. La suma debe ser **exactamente 100%**. Ejemplo Dulces: Inversiones 60% + Ahorros 40%. Principal puede usar otro esquema (ej. 60/30/10). |
+| RN-C08 | **Base de la distribución** | Los montos sugeridos = `% × total ventas de esa caja` en el período. No se usa un 60/30/10 global. |
+| RN-C09 | **POS unificado** | El cobro no pide «en qué caja»; la atribución sale del producto. El gate de ventas sigue siendo la sesión RF22, no el fondo. |
+| RN-C10 | **Navegación: pantalla Mis cajas** | RF27/RF28 se operan en **SCR-06** (`/cajas`): ítem de menú lateral **Mis cajas** y pestaña móvil **Cajas**. SCR-04 Reportes solo muestra tarjetas resumen con enlace a SCR-06. Inventario sigue siendo donde se asigna la caja al producto. |
 
 ### Notas técnicas para la fase de Tech Lead
 
-- **RF24 (fotos con Cloudinary):** Se integrará con el API/SDK de Cloudinary o Widget de subida directa optimizado. Se guarda la URL HTTPS de la imagen en `products.image_url`. No se sobrecarga IndexedDB con archivos binarios pesados y la imagen queda sincronizada automáticamente en todos los dispositivos.
-- **RF26 (reporte diario y exportación):** El motor de reportes permitirá consultar por rango de fechas o día puntual con agregaciones completas y generar exportaciones en formato CSV/Excel (utilizando librerías livianas como `xlsx` o `jspdf`).
-- **RF27 (cajas de facturación):** Requiere una entidad `cash_registers` o `drawers` (cajas de facturación) asociables a categorías o productos (`cash_register_id`). Las transacciones y los arqueos de caja (`cash_sessions`) se vinculan a su respectiva caja de facturación.
-- **RF28 (distribución parametrizable):** Se crea una tabla o configuración local (`app_settings` / `distribution_rules`) donde se almacenan los porcentajes configurados (`reinvestment_pct`, `expenses_pct`, `personal_pct`, cuya suma debe ser 100%).
+- **RF22 (sesión POS + gate):** `cash_sessions`, `expenses`, `sales.cash_session_id`. Una sola sesión `open`. Ver ADR-012.
+- **RF27 (fondos):** `cash_registers` con `is_principal`; `products.cash_register_id` NOT NULL (tras migración); `sale_items.cash_register_id` snapshot. UI: `features/cash` → SCR-06. Ver ADR-011.
+- **RF28 (distribución por caja):** `cash_register_distribution_lines` (rubro + porcentaje por `cash_register_id`). Sustituye el singleton global `distribution_settings`. Ver ADR-009.
+- **RF24 (fotos con Cloudinary):** URL HTTPS en `products.image_url`.
+- **RF26 (reporte diario y exportación):** consultas por fecha y CSV/Excel/PDF; fuera de este slice.
 
 ---
 

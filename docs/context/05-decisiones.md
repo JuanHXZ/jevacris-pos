@@ -50,7 +50,8 @@
   │   ├── pos/          # Pantalla POS, Carrito, Modal de Cobro & Vueltas
   │   ├── inventory/    # Catálogo, Formulario de Producto, Cálculo de Margen
   │   ├── stock/        # Entradas de mercancía y compras
-  │   └── reports/      # Dashboard, cuadre de caja, ganancias externas, distribución
+  │   ├── reports/      # Dashboard, sesión POS, fondos, ganancias externas
+  │   └── cash/         # RF22 sesión; RF27/RF28 fondos y distribución por caja
   ├── db/               # Configuración de Dexie, esquema y migraciones
   ├── repositories/     # Capa de acceso a datos (CRUD y queries especializadas)
   ├── sync/             # Motor de sincronización en segundo plano con Supabase
@@ -95,16 +96,18 @@
 
 ---
 
-## ADR-009: Distribución Financiera Configurable de Ingresos y Reinversión (Fase 2)
-- **Decisión:** Implementar en el módulo de reportes y arqueo un modelo de distribución de ingresos parametrizable por el usuario:
-  - **Reinversión en Mercancía:** Porcentaje configurable (sugerido inicial: 60%) destinado al reabastecimiento de stock.
-  - **Gastos Operativos Fijos:** Porcentaje configurable (sugerido inicial: 30%) apartado para cubrir arriendo y servicios públicos del local.
-  - **Fondo Personal / Ahorro / Diario:** Porcentaje configurable (sugerido inicial: 10%) para gastos menores del día a día (café, refrigerios, imprevistos) o ahorro.
+## ADR-009: Distribución Financiera Configurable **por caja de facturación** (RF28)
+- **Decisión (actualizada):** La distribución **no es global**. Cada `cash_register` tiene sus propios rubros (`cash_register_distribution_lines`: etiqueta + porcentaje). La suma por caja es 100%. El monto sugerido de cada rubro = `% × total ventas de esa caja` en el período.
+- **Ejemplos:**
+  - Caja Principal (default editable): 60% reinversión / 30% gastos operativos / 10% ahorro.
+  - Caja Dulces: 60% inversiones / 40% ahorros.
 - **Alternativas consideradas:**
-  - *Porcentajes fijos o estáticos en código:* Descartados porque las necesidades de reinversión varían según la temporada o la línea de negocio.
-  - *Distribución rígida con bloqueo de fondos:* Descartada por restar agilidad a la operación de mostrador.
-- **Razón:** La dueña puede calibrar libremente sus metas porcentuales para saber exactamente cuánto dinero separar para recompras y costos fijos sin descapitalizarse.
-- **Fuente de la decisión:** Requisito operacional definido por el usuario.
+  - *Singleton 60/30/10 para todo el negocio:* Descartado — cada línea (aseo vs. dulces) reparte distinto.
+  - *Tres columnas fijas (reinversión / gastos / ahorro):* Descartado — Caja Dulces solo usa dos rubros.
+  - *Distribución rígida con bloqueo de fondos:* Descartada por restar agilidad al mostrador.
+- **Razón:** La dueña sabe, por fondo, cuánto apartar para recompra vs. ahorro sin mezclar líneas.
+- **Fuente de la decisión:** Requisito original + validación 2026-09-10 (distribución personalizada por caja).
+- **Cambio respecto a la versión anterior de este ADR:** se elimina `distribution_settings` global.
 
 ---
 
@@ -118,10 +121,32 @@
 
 ---
 
-## ADR-011: Gestión de Múltiples Cajas de Facturación / Fondos de Dinero por Línea de Producto (Fase 2)
-- **Decisión:** Modelar el concepto de **Cajas de Facturación** (`cash_registers`) como gavetas/fondos de dinero contables o físicos independientes dentro del negocio (ej. Caja de Aseo, Caja de Dulces/Mecato, Caja de Servicios), asociando categorías o productos a cada caja correspondiente.
+## ADR-011: Cajas de Facturación (fondos contables) con Caja Principal (RF27)
+- **Decisión (actualizada):** `cash_registers` son **fondos contables por línea de producto**, no terminales POS. Siempre existe **Caja Principal** (`is_principal`). El catálogo actual y los productos nuevos (si no se elige otra) se asignan a Principal. Se pueden crear más cajas. Un producto pertenece a **una** caja. Al vender se hace snapshot en `sale_items.cash_register_id`. Cada caja expone total ventas y total ganancias.
 - **Alternativas consideradas:**
-  - *Caja única indivisible:* Dificulta a la dueña saber cuánto efectivo físico pertenece al surtido de aseo frente a otras líneas del negocio.
-  - *Tratar "cajas" como combos o kits de productos:* Descartado por ser una interpretación errónea del término usado por la dueña.
-- **Razón:** Permite arqueos y cuadres de caja independientes por línea de venta, facilitando que cada fondo aporte proporcionalmente a los gastos fijos compartidos (arriendo/servicios) y mantenga su presupuesto de reinversión autónomo.
-- **Fuente de la decisión:** Clarificación del modelo de negocio por parte del usuario.
+  - *Solo caja única (slice previo de ADR-012):* Revertida a pedido del usuario: necesita separar dulces vs. principal con reglas distintas.
+  - *Un producto en varias cajas a la vez:* Descartado — partiría un SKU y el cobro no sabría a qué fondo va.
+  - *Abrir/cerrar sesión por cada fondo:* Descartado — el mostrador tiene una gaveta; el gate de ventas es RF22 global.
+  - *Tratar "cajas" como combos/kits:* Descartado (malentendido del término de la dueña).
+- **Razón:** Permite ver y repartir el dinero de cada línea sin complicar el cobro.
+- **Navegación (validada 2026-09-10):** pantalla de nivel 0 **SCR-06 Mis cajas** (`/cajas`) en sidebar y bottom nav. No se administra fondos solo como sección de Reportes: Reportes queda para la jornada (RF22) y un atajo-resumen hacia SCR-06.
+- **Fuente de la decisión:** Usuario 2026-09-10 (Principal automática, una caja por producto, pantalla Mis cajas).
+- **Cambio respecto a la versión anterior:** RF27 entra en el mismo slice que RF22/RF28; ya no es “futuro desacoplado”.
+
+---
+
+## ADR-012: Sesión de jornada POS única con Gate de Ventas (RF22)
+- **Decisión (actualizada):** Sigue habiendo **una sola sesión operativa** (`cash_sessions`) para el mostrador. Las ventas solo se confirman si hay `status = 'open'`. Tras el cierre, el POS bloquea cobros. El arqueo es de la **gaveta física** (efectivo de todas las ventas cash de la sesión − gastos), no un arqueo por fondo.
+- **Alternativas consideradas:**
+  - *Arqueo opcional sin bloquear ventas:* Descartada.
+  - *Una sesión open por cada cash_register:* Descartada — mezclaría fondos contables con la gaveta y bloquearía mal el POS.
+  - *Cerrar/abrir a medianoche:* Descartada; el cierre es explícito.
+- **Reglas clave:**
+  1. Máximo una sesión `open` globalmente.
+  2. `sales.cash_session_id` = sesión abierta.
+  3. Efectivo esperado = `opening_cash + Σ ventas cash − Σ gastos`.
+  4. Diferencia = contado − calculado.
+  5. La atribución a Principal/Dulces es RF27 sobre ítems, no sobre la sesión.
+- **Razón:** Disciplina de jornada tipo POS profesional, sin N aperturas por fondo.
+- **Fuente de la decisión:** Validación previa (gate de ventas) + ajuste 2026-09-10 (convive con múltiples fondos).
+- **Cambio respecto a la versión anterior:** ya no dice “no acoplar RF27”; se acopla como fondos, no como sesiones múltiples.

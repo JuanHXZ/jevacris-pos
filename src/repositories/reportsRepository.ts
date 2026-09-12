@@ -1,5 +1,8 @@
 import { db } from '../db';
-import type { DailySummary, ExternalEarning, Sale, SaleItem } from '../types';
+import type { CashRegisterSummary, DailySummary, ExternalEarning, Sale, SaleItem } from '../types';
+import { cashRegisterRepository } from './cashRegisterRepository';
+import { cashSessionRepository } from './cashSessionRepository';
+import { ensurePrincipalCashRegister } from '../db/cashBootstrap';
 
 export interface WeeklyDayData {
   dayName: string;
@@ -151,5 +154,49 @@ export const reportsRepository = {
       ...s,
       items: itemsBySaleId.get(s.id) || s.items || []
     }));
+  },
+
+  async getCashRegisterSummaries(dateString?: string): Promise<CashRegisterSummary[]> {
+    await ensurePrincipalCashRegister({
+      cashRegisters: db.cashRegisters,
+      cashRegisterDistributionLines: db.cashRegisterDistributionLines,
+      products: db.products
+    });
+    const targetDate = dateString || new Date().toISOString().split('T')[0];
+    const registers = await cashRegisterRepository.getAll(true);
+    const allSales = await db.sales.toArray();
+    const daySaleIds = new Set(allSales.filter((s) => s.saleDate.startsWith(targetDate)).map((s) => s.id));
+    const items = (await db.saleItems.toArray()).filter((item) => daySaleIds.has(item.saleId));
+
+    const summaries: CashRegisterSummary[] = [];
+    for (const register of registers.filter((r) => r.isActive !== false || r.isPrincipal)) {
+      const registerItems = items.filter((item) => item.cashRegisterId === register.id);
+      const totalSales = registerItems.reduce((sum, item) => sum + item.subtotal, 0);
+      const totalProfit = registerItems.reduce((sum, item) => sum + item.profit, 0);
+      const lines = await cashRegisterRepository.getDistribution(register.id);
+      summaries.push({
+        register,
+        totalSales,
+        totalProfit,
+        distribution: lines.map((line) => ({
+          line,
+          suggestedAmount: totalSales * (line.percentage / 100)
+        }))
+      });
+    }
+    return summaries;
+  },
+
+  async getCashRegisterDetail(registerId: string, dateString?: string) {
+    const summaries = await this.getCashRegisterSummaries(dateString);
+    const summary = summaries.find((s) => s.register.id === registerId);
+    const products = await db.products
+      .filter((p) => p.isActive !== false && p.cashRegisterId === registerId)
+      .toArray();
+    return { summary, products };
+  },
+
+  async getOpenSession() {
+    return cashSessionRepository.getOpenSession();
   }
 };

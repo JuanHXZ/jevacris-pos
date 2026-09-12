@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -35,5 +35,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       }
     })
-  ]
+  ],
+  test: {
+    environment: 'node',
+    setupFiles: ['./src/test/setup.ts']
+  }
 });

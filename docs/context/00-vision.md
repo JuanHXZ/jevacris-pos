@@ -26,10 +26,8 @@ El sistema resuelve este problema proveyendo una Progressive Web App (PWA) de Pu
 
 **No incluye (Fase 2+):**
 - **Módulo de Fiados / Cuentas por Cobrar:** Registro por cliente, lista de productos adeudados, fecha y control de abonos/pagos parciales (RF18).
-- **Múltiples Cajas de Facturación:** Fondos y gavetas de dinero independientes por línea de producto (aseo, mecato/dulces, servicios) con cuadres por separado (RF27).
-- **Apertura y Cierre de Caja (Arqueo):** Conteo de efectivo físico contra sistema y deducción de gastos operativos varios (RF22).
+- **Apertura / Cierre de jornada, fondos y distribución (RF22 + RF27 + RF28) — siguiente slice:** Sesión POS única (gate de ventas). **Caja Principal** automática; un producto → una caja (default Principal). Pantalla **Mis cajas** (`/cajas`) para crear y ver detalle; Reportes solo resume y enlaza. Distribución % por caja (ej. Dulces 60% inversiones / 40% ahorros). Ver `01-requisitos-funcionales.md` y ADR-009 / ADR-011 / ADR-012.
 - **Reporte Histórico Detallado por Fecha y Exportación (Excel/PDF):** Consulta de días específicos y generación de reportes descargables (RF20 / RF26).
-- **Módulo de Distribución y Reinversión Configurable:** Calculadora de metas con porcentajes parametrizables para reinversión, gastos fijos y ahorro personal (RF28).
 - **Bloqueo por PIN Local:** Protección de acceso en mostrador sin conexión (RF23).
 - **Fotos de productos en catálogo alojadas en Cloudinary** (RF24).
 - **Gestión de Proveedores:** Historial de compras y trazabilidad de distribuidores (RF25).

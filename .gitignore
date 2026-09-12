@@ -19,6 +19,7 @@ dist-ssr
 .env.*.local
 
 # Editor directories and files
+.cursor/mcp.json
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -28,3 +29,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel

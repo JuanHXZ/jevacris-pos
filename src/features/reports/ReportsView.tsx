@@ -9,16 +9,18 @@ import {
   AlertTriangle,
   Sparkles,
   Package,
-  Plus
+  Plus,
+  Wallet
 } from 'lucide-react';
 import { db } from '../../db';
 import { reportsRepository, type WeeklyDayData } from '../../repositories/reportsRepository';
 import { Modal } from '../../components/ui/Modal';
 import { DayTransactionsModal } from './components/DayTransactionsModal';
+import { CashSessionModal } from '../cash/components/CashSessionModal';
 import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/currency';
-import type { DailySummary } from '../../types';
+import type { CashRegisterSummary, DailySummary } from '../../types';
 
-export const ReportsView: React.FC = () => {
+export const ReportsView: React.FC<{ onGoToCash?: () => void }> = ({ onGoToCash }) => {
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
@@ -36,6 +38,9 @@ export const ReportsView: React.FC = () => {
   const [isExternalModalOpen, setIsExternalModalOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
+  const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+  const [sessionModalMode, setSessionModalMode] = useState<'open' | 'operate' | 'close'>('operate');
+  const [cajaSummaries, setCajaSummaries] = useState<CashRegisterSummary[]>([]);
 
   // Formulario de Ganancia Externa
   const [platformName, setPlatformName] = useState('Recargas Móviles');
@@ -45,6 +50,8 @@ export const ReportsView: React.FC = () => {
   // Live queries desde IndexedDB
   const salesCount = useLiveQuery(() => db.sales.count());
   const earningsCount = useLiveQuery(() => db.externalEarnings.count());
+  const openSession = useLiveQuery(() => db.cashSessions.filter((s) => s.status === 'open').first());
+  const sessionCount = useLiveQuery(() => db.cashSessions.count());
   const lowStockProducts = useLiveQuery(() =>
     db.products
       .filter((p) => p.isActive !== false && p.type === 'physical' && p.currentStock <= p.minStockAlert)
@@ -60,14 +67,16 @@ export const ReportsView: React.FC = () => {
       const dailyData = await reportsRepository.getDailySummary(selectedDate);
       const prevSales = await reportsRepository.getYesterdaySales(selectedDate);
       const weekTrend = await reportsRepository.getWeeklySalesData(selectedDate);
+      const cajas = await reportsRepository.getCashRegisterSummaries(selectedDate);
 
       setSummary(dailyData);
       setYesterdaySales(prevSales);
       setWeeklyData(weekTrend);
+      setCajaSummaries(cajas);
     };
 
     loadReportData();
-  }, [selectedDate, salesCount, earningsCount]);
+  }, [selectedDate, salesCount, earningsCount, sessionCount]);
 
   // Formato de fecha editorial: "Jueves, 24 de Octubre de 2023"
   const formatEditorialDate = (dateStr: string) => {
@@ -101,6 +110,17 @@ export const ReportsView: React.FC = () => {
     return formatCOP(val);
   };
 
+  const sessionBtnStyle: React.CSSProperties = {
+    backgroundColor: '#fdf7ff',
+    border: '1px solid #cfc3cf',
+    borderRadius: '9999px',
+    padding: '8px 16px',
+    fontSize: '12px',
+    fontWeight: 700,
+    cursor: 'pointer',
+    color: '#310344'
+  };
+
   // Altura máxima del gráfico semanal
   const maxWeeklySale = Math.max(...weeklyData.map((d) => d.totalSales), 1);
 
@@ -128,12 +148,27 @@ export const ReportsView: React.FC = () => {
     const saleItems = await db.saleItems.toArray();
     const stockEntries = await db.stockEntries.toArray();
     const externalEarnings = await db.externalEarnings.toArray();
+    const cashRegisters = await db.cashRegisters.toArray();
+    const cashRegisterDistributionLines = await db.cashRegisterDistributionLines.toArray();
+    const cashSessions = await db.cashSessions.toArray();
+    const expenses = await db.expenses.toArray();
 
     const backup = {
-      version: 1,
+      version: 2,
       appName: 'JEVACRIS POS & INVENTORY',
       exportedAt: new Date().toISOString(),
-      data: { categories: cats, products: prods, sales, saleItems, stockEntries, externalEarnings }
+      data: {
+        categories: cats,
+        products: prods,
+        sales,
+        saleItems,
+        stockEntries,
+        externalEarnings,
+        cashRegisters,
+        cashRegisterDistributionLines,
+        cashSessions,
+        expenses
+      }
     };
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -275,6 +310,98 @@ export const ReportsView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          flexWrap: 'wrap',
+          backgroundColor: openSession ? '#ecfdf3' : '#fff4e5',
+          border: `1px solid ${openSession ? '#86efac' : '#f5c16c'}`,
+          borderRadius: '24px',
+          padding: '14px 18px'
+        }}
+      >
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em', color: '#4d444e' }}>SESIÓN POS</div>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: '#1d1a22' }}>
+            {openSession ? `Abierta · base ${formatCOP(openSession.openingCash)}` : 'Cerrada · no se puede vender'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {openSession ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionModalMode('operate');
+                  setIsSessionModalOpen(true);
+                }}
+                style={sessionBtnStyle}
+              >
+                Gastos
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSessionModalMode('close');
+                  setIsSessionModalOpen(true);
+                }}
+                style={sessionBtnStyle}
+              >
+                Cerrar caja
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setSessionModalMode('open');
+                setIsSessionModalOpen(true);
+              }}
+              style={{ ...sessionBtnStyle, backgroundColor: '#310344', color: '#fff', border: 'none' }}
+            >
+              Abrir caja
+            </button>
+          )}
+        </div>
+      </div>
+
+      {cajaSummaries.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h2 style={{ margin: 0, fontSize: '18px' }}>Mis cajas (hoy)</h2>
+            <button type="button" onClick={onGoToCash} style={{ border: 'none', background: 'transparent', color: '#7a4c8c', fontWeight: 700, cursor: 'pointer' }}>
+              Ver detalle
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+            {cajaSummaries.map((s) => (
+              <button
+                key={s.register.id}
+                type="button"
+                onClick={onGoToCash}
+                style={{
+                  textAlign: 'left',
+                  backgroundColor: '#fdf7ff',
+                  border: '1px solid #ece6f1',
+                  borderRadius: '20px',
+                  padding: '16px',
+                  cursor: 'pointer'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Wallet size={14} color="#7a4c8c" />
+                  <strong>{s.register.name}</strong>
+                </div>
+                <div style={{ fontSize: '18px', fontWeight: 700 }}>{formatCOP(s.totalSales)}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* Bento Grid 60% / 40% (Figma 1:723)                                        */}
@@ -1136,6 +1263,11 @@ export const ReportsView: React.FC = () => {
         onClose={() => setIsTransactionsModalOpen(false)}
         selectedDate={selectedDate}
         formattedDate={formatEditorialDate(selectedDate)}
+      />
+      <CashSessionModal
+        isOpen={isSessionModalOpen}
+        onClose={() => setIsSessionModalOpen(false)}
+        initialMode={sessionModalMode}
       />
 
       <style>{`

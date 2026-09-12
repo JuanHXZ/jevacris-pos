@@ -1,6 +1,7 @@
 import { db, isDevMode } from '../db';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import type { Sale, SaleItem } from '../types';
+import { PRINCIPAL_CASH_REGISTER_ID } from '../types';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error' | 'dev_mode' | 'unconfigured';
 
@@ -80,19 +81,14 @@ class SyncEngine {
     this.setStatus('syncing');
 
     try {
-      // 1. Sincronizar Categorías
+      await this.syncCashRegisters();
+      await this.syncDistributionLines();
+      await this.syncCashSessions();
+      await this.syncExpenses();
       await this.syncCategories();
-
-      // 2. Sincronizar Productos
       await this.syncProducts();
-
-      // 3. Sincronizar Ventas y Detalles
       await this.syncSales();
-
-      // 4. Sincronizar Entradas de Stock
       await this.syncStockEntries();
-
-      // 5. Sincronizar Ganancias Externas
       await this.syncExternalEarnings();
 
       this.lastSyncedAt = new Date();
@@ -165,6 +161,7 @@ class SyncEngine {
         current_stock: p.currentStock,
         min_stock_alert: p.minStockAlert,
         is_active: p.isActive ? 1 : 0,
+        cash_register_id: p.cashRegisterId || null,
         created_at: p.createdAt,
         updated_at: p.updatedAt
       }));
@@ -193,6 +190,7 @@ class SyncEngine {
             salePrice: row.sale_price,
             currentStock: row.current_stock,
             minStockAlert: row.min_stock_alert,
+            cashRegisterId: row.cash_register_id || PRINCIPAL_CASH_REGISTER_ID,
             isActive: Boolean(row.is_active),
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -219,6 +217,7 @@ class SyncEngine {
           payment_method: sale.paymentMethod,
           amount_received: sale.amountReceived,
           change_given: sale.changeGiven,
+          cash_session_id: sale.cashSessionId || null,
           notes: sale.notes || null,
           created_at: sale.createdAt,
           updated_at: sale.updatedAt
@@ -236,6 +235,7 @@ class SyncEngine {
             unit_cost: item.unitCost,
             subtotal: item.subtotal,
             profit: item.profit,
+            cash_register_id: item.cashRegisterId || null,
             created_at: item.createdAt
           }));
           await supabase.from('sale_items').upsert(itemsPayload);
@@ -260,6 +260,7 @@ class SyncEngine {
             paymentMethod: row.payment_method,
             amountReceived: row.amount_received,
             changeGiven: row.change_given,
+            cashSessionId: row.cash_session_id || undefined,
             notes: row.notes,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -280,6 +281,7 @@ class SyncEngine {
                 unitCost: itemRow.unit_cost,
                 subtotal: itemRow.subtotal,
                 profit: itemRow.profit,
+                cashRegisterId: itemRow.cash_register_id || PRINCIPAL_CASH_REGISTER_ID,
                 createdAt: itemRow.created_at
               };
               await db.saleItems.put(item);
@@ -369,6 +371,180 @@ class SyncEngine {
             platformName: row.platform_name,
             amount: row.amount,
             notes: row.notes,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            synced: true
+          });
+        }
+      }
+    }
+  }
+
+  private async syncCashRegisters() {
+    if (!supabase) return;
+    const unsynced = await db.cashRegisters.filter((c) => !c.synced).toArray();
+    if (unsynced.length > 0) {
+      const payload = unsynced.map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || null,
+        is_principal: c.isPrincipal ? 1 : 0,
+        is_active: c.isActive ? 1 : 0,
+        created_at: c.createdAt,
+        updated_at: c.updatedAt
+      }));
+      const { error } = await supabase.from('cash_registers').upsert(payload);
+      if (!error) {
+        for (const item of unsynced) {
+          await db.cashRegisters.update(item.id, { synced: true });
+        }
+      }
+    }
+
+    const { data: cloudData, error } = await supabase.from('cash_registers').select('*');
+    if (!error && cloudData) {
+      for (const row of cloudData) {
+        const local = await db.cashRegisters.get(row.id);
+        if (!local || new Date(row.updated_at) > new Date(local.updatedAt)) {
+          await db.cashRegisters.put({
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            isPrincipal: Boolean(row.is_principal),
+            isActive: Boolean(row.is_active),
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            synced: true
+          });
+        }
+      }
+    }
+  }
+
+  private async syncDistributionLines() {
+    if (!supabase) return;
+    const unsynced = await db.cashRegisterDistributionLines.filter((c) => !c.synced).toArray();
+    if (unsynced.length > 0) {
+      const payload = unsynced.map((c) => ({
+        id: c.id,
+        cash_register_id: c.cashRegisterId,
+        label: c.label,
+        percentage: c.percentage,
+        sort_order: c.sortOrder,
+        created_at: c.createdAt,
+        updated_at: c.updatedAt
+      }));
+      const { error } = await supabase.from('cash_register_distribution_lines').upsert(payload);
+      if (!error) {
+        for (const item of unsynced) {
+          await db.cashRegisterDistributionLines.update(item.id, { synced: true });
+        }
+      }
+    }
+
+    const { data: cloudData, error } = await supabase.from('cash_register_distribution_lines').select('*');
+    if (!error && cloudData) {
+      for (const row of cloudData) {
+        const local = await db.cashRegisterDistributionLines.get(row.id);
+        if (!local || new Date(row.updated_at) > new Date(local.updatedAt)) {
+          await db.cashRegisterDistributionLines.put({
+            id: row.id,
+            cashRegisterId: row.cash_register_id,
+            label: row.label,
+            percentage: row.percentage,
+            sortOrder: row.sort_order,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            synced: true
+          });
+        }
+      }
+    }
+  }
+
+  private async syncCashSessions() {
+    if (!supabase) return;
+    const unsynced = await db.cashSessions.filter((c) => !c.synced).toArray();
+    if (unsynced.length > 0) {
+      const payload = unsynced.map((c) => ({
+        id: c.id,
+        opened_at: c.openedAt,
+        closed_at: c.closedAt || null,
+        opening_cash: c.openingCash,
+        closing_cash_calculated: c.closingCashCalculated ?? null,
+        closing_cash_counted: c.closingCashCounted ?? null,
+        difference: c.difference ?? null,
+        status: c.status,
+        notes: c.notes || null,
+        created_at: c.createdAt,
+        updated_at: c.updatedAt
+      }));
+      const { error } = await supabase.from('cash_sessions').upsert(payload);
+      if (!error) {
+        for (const item of unsynced) {
+          await db.cashSessions.update(item.id, { synced: true });
+        }
+      }
+    }
+
+    const { data: cloudData, error } = await supabase.from('cash_sessions').select('*');
+    if (!error && cloudData) {
+      for (const row of cloudData) {
+        const local = await db.cashSessions.get(row.id);
+        if (!local || new Date(row.updated_at) > new Date(local.updatedAt)) {
+          await db.cashSessions.put({
+            id: row.id,
+            openedAt: row.opened_at,
+            closedAt: row.closed_at || undefined,
+            openingCash: row.opening_cash,
+            closingCashCalculated: row.closing_cash_calculated ?? undefined,
+            closingCashCounted: row.closing_cash_counted ?? undefined,
+            difference: row.difference ?? undefined,
+            status: row.status,
+            notes: row.notes,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            synced: true
+          });
+        }
+      }
+    }
+  }
+
+  private async syncExpenses() {
+    if (!supabase) return;
+    const unsynced = await db.expenses.filter((c) => !c.synced).toArray();
+    if (unsynced.length > 0) {
+      const payload = unsynced.map((c) => ({
+        id: c.id,
+        cash_session_id: c.cashSessionId,
+        category: c.category,
+        amount: c.amount,
+        description: c.description || null,
+        expense_date: c.expenseDate,
+        created_at: c.createdAt,
+        updated_at: c.updatedAt
+      }));
+      const { error } = await supabase.from('expenses').upsert(payload);
+      if (!error) {
+        for (const item of unsynced) {
+          await db.expenses.update(item.id, { synced: true });
+        }
+      }
+    }
+
+    const { data: cloudData, error } = await supabase.from('expenses').select('*');
+    if (!error && cloudData) {
+      for (const row of cloudData) {
+        const local = await db.expenses.get(row.id);
+        if (!local) {
+          await db.expenses.put({
+            id: row.id,
+            cashSessionId: row.cash_session_id,
+            category: row.category,
+            amount: row.amount,
+            description: row.description,
+            expenseDate: row.expense_date,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
             synced: true

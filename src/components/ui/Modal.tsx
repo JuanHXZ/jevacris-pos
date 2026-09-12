@@ -8,6 +8,7 @@ export interface ModalProps {
   subtitle?: string;
   children: React.ReactNode;
   maxWidth?: string;
+  isDismissible?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -16,17 +17,18 @@ export const Modal: React.FC<ModalProps> = ({
   title,
   subtitle,
   children,
-  maxWidth = '560px'
+  maxWidth = '560px',
+  isDismissible = true
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && isDismissible) {
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isDismissible, isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -46,7 +48,7 @@ export const Modal: React.FC<ModalProps> = ({
         padding: '24px 16px',
         zIndex: 1000
       }}
-      onClick={onClose}
+      onClick={isDismissible ? onClose : undefined}
     >
       <div
         style={{
@@ -120,27 +122,29 @@ export const Modal: React.FC<ModalProps> = ({
             )}
           </div>
 
-          <button
-            onClick={onClose}
-            style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '9999px',
-              backgroundColor: '#f2ecf7',
-              border: 'none',
-              color: '#310344',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'background-color 0.15s ease, transform 0.15s ease'
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#e6e0eb')}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f2ecf7')}
-            aria-label="Cerrar modal"
-          >
-            <X size={18} />
-          </button>
+          {isDismissible && (
+            <button
+              onClick={onClose}
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '9999px',
+                backgroundColor: '#f2ecf7',
+                border: 'none',
+                color: '#310344',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background-color 0.15s ease, transform 0.15s ease'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#e6e0eb')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f2ecf7')}
+              aria-label="Cerrar modal"
+            >
+              <X size={18} />
+            </button>
+          )}
         </div>
 
         {/* Content */}

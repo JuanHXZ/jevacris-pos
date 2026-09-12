@@ -3,6 +3,9 @@ import { Sparkles, ArrowRight, Plus, Check, Trash2, AlertTriangle } from 'lucide
 import { Modal } from '../../../components/ui/Modal';
 import { Button } from '../../../components/ui/Button';
 import { productRepository } from '../../../repositories/productRepository';
+import { PRINCIPAL_CASH_REGISTER_ID } from '../../../types';
+import { db } from '../../../db';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { formatNumberWithDots, parseCOPInput } from '../../../utils/currency';
 import type { Product, Category, ProductType } from '../../../types';
 
@@ -34,6 +37,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [salePrice, setSalePrice] = useState<number>(0);
   const [currentStock, setCurrentStock] = useState<number>(0);
   const [minStockAlert, setMinStockAlert] = useState<number>(5);
+  const [cashRegisterId, setCashRegisterId] = useState(PRINCIPAL_CASH_REGISTER_ID);
+  const cashRegisters = useLiveQuery(() => db.cashRegisters.filter((r) => r.isActive !== false).toArray(), []) || [];
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,6 +60,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setSalePrice(editingProduct.salePrice || 0);
       setCurrentStock(editingProduct.currentStock || 0);
       setMinStockAlert(editingProduct.minStockAlert || 5);
+      setCashRegisterId(editingProduct.cashRegisterId || PRINCIPAL_CASH_REGISTER_ID);
     } else {
       setName(initialName || '');
       setCategoryId(categories[0]?.id ?? '');
@@ -65,6 +71,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setSalePrice(0);
       setCurrentStock(0);
       setMinStockAlert(5);
+      setCashRegisterId(PRINCIPAL_CASH_REGISTER_ID);
     }
     setIsAddingCategory(false);
     setNewCategoryName('');
@@ -141,7 +148,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           marginPercentage: type === 'physical' ? marginPercentage : 0,
           salePrice,
           currentStock: type === 'physical' ? currentStock : 0,
-          minStockAlert: type === 'physical' ? minStockAlert : 0
+          minStockAlert: type === 'physical' ? minStockAlert : 0,
+          cashRegisterId: cashRegisterId || PRINCIPAL_CASH_REGISTER_ID
         });
         if (onSuccess) onSuccess(editingProduct.id, 'update', trimmedName);
         onClose();
@@ -156,6 +164,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           salePrice,
           currentStock: type === 'physical' ? currentStock : 0,
           minStockAlert: type === 'physical' ? minStockAlert : 0,
+          cashRegisterId: cashRegisterId || PRINCIPAL_CASH_REGISTER_ID,
           isActive: true
         });
         if (onSuccess) onSuccess(newId, 'create', trimmedName);
@@ -422,6 +431,46 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
               <option value="service">Servicio / Recarga (sin stock)</option>
             </select>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label
+            style={{
+              fontSize: '11.5px',
+              fontWeight: 700,
+              color: '#4d444e',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              fontFamily: 'var(--font-sans)'
+            }}
+          >
+            CAJA DE FACTURACIÓN
+          </label>
+          <select
+            value={cashRegisterId}
+            onChange={(e) => setCashRegisterId(e.target.value)}
+            style={{
+              width: '100%',
+              height: '48px',
+              backgroundColor: '#ffffff',
+              border: '1px solid #cfc3cf',
+              borderRadius: '24px',
+              padding: '0 16px',
+              fontSize: '14px',
+              fontWeight: 600,
+              color: '#1d1a22',
+              outline: 'none',
+              boxSizing: 'border-box',
+              fontFamily: 'var(--font-sans)',
+              cursor: 'pointer'
+            }}
+          >
+            {cashRegisters.map((reg) => (
+              <option key={reg.id} value={reg.id}>
+                {reg.name}{reg.isPrincipal ? ' (Principal)' : ''}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Unidad de Medida / Presentación con Chips de sugerencia rápida (Solo para productos físicos) */}

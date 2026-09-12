@@ -1,5 +1,6 @@
 import { db } from '../db';
 import type { Product, Category } from '../types';
+import { PRINCIPAL_CASH_REGISTER_ID } from '../types';
 
 export const productRepository = {
   async getAll(): Promise<Product[]> {
@@ -38,6 +39,7 @@ export const productRepository = {
       salePrice: Math.max(0, product.salePrice || 0),
       currentStock: isPhysical ? Math.max(0, product.currentStock || 0) : 0,
       minStockAlert: isPhysical ? Math.max(0, product.minStockAlert || 0) : 0,
+      cashRegisterId: product.cashRegisterId || PRINCIPAL_CASH_REGISTER_ID,
       isActive: true,
       id,
       createdAt: now,
@@ -65,6 +67,9 @@ export const productRepository = {
       sanitizedUpdates.marginPercentage = 0;
       sanitizedUpdates.currentStock = 0;
       sanitizedUpdates.minStockAlert = 0;
+    }
+    if (updates.cashRegisterId !== undefined && !updates.cashRegisterId) {
+      sanitizedUpdates.cashRegisterId = PRINCIPAL_CASH_REGISTER_ID;
     }
 
     await db.products.update(id, sanitizedUpdates);

@@ -2,9 +2,12 @@
 
 ## 1. Tipo de mapa adoptado
 
-Navegación tipo **Barra Principal (Tabs)**:
-- **En móvil:** Barra de navegación inferior fija (*Bottom Navigation Bar*) con iconos grandes y etiquetas claras para alternar con una sola mano.
-- **En computador/tablet:** Barra lateral fija (*Sidebar*) que mantiene visible el acceso a todos los módulos y maximiza el espacio horizontal para el carrito de venta rápida y el catálogo.
+Navegación tipo **Barra Principal (Tabs)** — cinco destinos de nivel 0:
+
+`Venta Rápida` · `Inventario` · `Entradas` · `Mis cajas` · `Reportes`
+
+- **En móvil:** Barra de navegación inferior fija (*Bottom Navigation Bar*). Etiqueta corta **«Cajas»** para SCR-06.
+- **En computador/tablet:** Barra lateral fija (*Sidebar*) con etiqueta **«Mis cajas»**.
 
 ## 2. Pantalla de arranque
 
@@ -15,17 +18,20 @@ Navegación tipo **Barra Principal (Tabs)**:
 
 | Cód. | Pantalla | Ruta | Descripción |
 |------|----------|------|-------------|
-| SCR-01 | **POS / Venta Rápida** | `/` o `/pos` | **Pantalla principal de atención.** Buscador/selector rápido de productos agrupados por categorías, panel de carrito en vivo, subtotal, cálculo instantáneo y botón de cobro. |
+| SCR-01 | **POS / Venta Rápida** | `/` o `/pos` | **Pantalla principal de atención.** Buscador/selector rápido de productos agrupados por categorías, panel de carrito en vivo, subtotal, cálculo instantáneo y botón de cobro. **Con RF22:** si no hay sesión de caja abierta, el cobro queda bloqueado y se guía a apertura (MOD-06). |
 | SCR-02 | **Inventario & Catálogo** | `/inventario` | Listado completo de productos y servicios con stock actual, costo, % margen, precio de venta, estado de alerta (OK / Stock Bajo / Agotado), fotos Cloudinary y buscador. |
 | SCR-03 | **Entradas de Mercancía** | `/entradas` | Historial de compras/reabastecimientos registrados y botón para registrar nueva entrada de stock sumando directo al inventario. |
-| SCR-04 | **Caja y Reportes** | `/reportes` | Cuadre del día/semana, selector de fecha histórica para detalle diario exhaustivo, botón de exportar (Excel/PDF), registro de ganancias externas, ganancia total consolidada, productos críticos y calculadora de distribución configurable. |
+| SCR-04 | **Caja y Reportes** | `/reportes` | Cuadre del día/semana, estado de **sesión POS** (abierta/cerrada), arqueo (MOD-06), ganancias externas y productos críticos. **Atajo RF27:** tarjetas resumen (Principal / Dulces: ventas) que navegan a SCR-06. No se crea ni edita fondos aquí. |
+| SCR-06 | **Mis cajas** | `/cajas` | **Pantalla de primer nivel (RF27 / RF28).** Lista de fondos, crear caja, entrar al detalle: total ventas, total ganancias, distribución % (editable, suma 100%) y productos asignados. Caja Principal no se elimina. |
 
 ## 4. Rutas y Modales de Detalle (Nivel 1+)
 
 | Cód. | Componente / Modal | Disparador | Descripción |
 |------|---------------------|------------|-------------|
 | MOD-01 | **Modal de Cobro & Vueltas** | Botón "Cobrar" en SCR-01 (POS) | Muestra el total a pagar, botones rápidos de denominación de billetes colombianos ($10k, $20k, $50k, $100k, Exacto) o campo numérico, cálculo automático de vueltas y selector de medio de pago (Efectivo / Transferencia Nequi). Botón de "Confirmar Venta". |
-| MOD-02 | **Modal / Drawer Producto** | Botón "+ Nuevo Producto" o click en editar en SCR-02 | Formulario para crear/editar producto: Nombre, tipo (físico/servicio), categoría, caja de facturación asignada (Fase 2), unidad, costo de compra, % margen o precio fijo, stock inicial, stock mínimo y subida de foto vía Cloudinary (Fase 2). |
+| MOD-02 | **Modal / Drawer Producto** | Botón "+ Nuevo Producto" o click en editar en SCR-02 | Formulario: Nombre, tipo, categoría, **caja de facturación** (obligatoria; una sola; default Principal), unidad, costo, % margen o precio fijo, stock inicial, stock mínimo y foto Cloudinary (Fase 2). |
+| MOD-07 | **Crear / Editar caja de facturación** | Botón "+ Nueva caja" o editar en SCR-06 | Nombre, rubros de distribución (N líneas, suma 100%). La Principal no se puede borrar. |
+| MOD-07b | **Detalle de caja** | Tap/click en una caja de SCR-06 | Totales (ventas, ganancias), desglose de % con montos sugeridos, listado de productos de esa caja. |
 | MOD-03 | **Modal Registro de Entrada** | Botón "+ Registrar Entrada" en SCR-03 | Selector de producto, cantidad a ingresar, costo de compra (opcionalmente actualizable) y confirmación de suma al stock. |
 | MOD-04 | **Modal Ganancia Externa** | Botón "+ Ganancia Externa" en SCR-04 | Registro de utilidades liquidadas en plataformas de recargas o corresponsal bancario (fecha, plataforma/concepto, valor de ganancia neta). |
 | MOD-05 | **Modal de Respaldo Local** | Botón "Copia de Seguridad" en SCR-04 | Exportar base de datos a archivo JSON descargable e importar archivo para restaurar información. |
@@ -36,9 +42,7 @@ Navegación tipo **Barra Principal (Tabs)**:
 |------|-------------------|-------------|
 | SCR-00 / MOD-PIN | **Pantalla de Bloqueo por PIN** | Solicitud de PIN numérico rápido de 4 a 6 dígitos al abrir la app o tras inactividad. |
 | SCR-05 | **Módulo de Fiados / Cuentas por Cobrar** | Directorio de clientes con deuda, lista de productos fiados, historial de abonos y saldo pendiente. |
-| MOD-06 | **Apertura / Cierre de Caja & Gastos (Arqueo)** | Conteo de base inicial, registro de gastos varios del día (arriendo, servicios) y arqueo de caja con cálculo de diferencias. |
-| MOD-07 | **Gestor de Cajas de Facturación** | Administración de múltiples cajas o fondos de dinero por línea de negocio (Aseo, Dulces, Servicios) y asignación a productos. |
-| MOD-08 | **Configurador de Metas de Distribución** | Ajuste de los porcentajes configurables de reinversión (ej. 60%), gastos operativos (ej. 30%) y fondo personal/ahorro (ej. 10%). |
+| MOD-06 | **Apertura / Cierre de jornada & Gastos (Arqueo) — RF22** | Una sesión POS: (1) apertura con base; (2) gastos de la jornada; (3) cierre con conteo vs. esperado y bloqueo de ventas. Independiente de los fondos RF27. Vive en SCR-04, no en Mis cajas. |
 | MOD-09 | **Exportador de Reportes** | Generador de reportes consolidados y diarios descargables en Excel, PDF o CSV. |
 
 ## 6. Decisiones de flujo
@@ -46,7 +50,10 @@ Navegación tipo **Barra Principal (Tabs)**:
 - **Venta de servicios/recargas:** Se añaden al carrito en SCR-01 como cualquier ítem, pero se solicita el monto o se elige un valor predefinido. No descuentan inventario físico al confirmar la venta.
 - **Cobro exprés:** Al presionar "Cobrar" en POS, el foco va de inmediato al monto recibido para que el cálculo de vueltas aparezca en tiempo real con cada tecla pulsada.
 - **Confirmación de venta:** Al pulsar "Confirmar Venta", se limpia el carrito inmediatamente, se descuenta el stock en segundo plano y se muestra un banner/toast verde no bloqueante con el monto de las vueltas para que la dueña pueda leerlo con calma mientras entrega el cambio.
-
+- **Gate de jornada (RF22 / ADR-012):** Sin sesión `open`, el POS no confirma cobros. Una sesión abierta a la vez; puede cruzar medianoche.
+- **Fondos (RF27):** Un producto → una caja (default Principal). El cobro no pregunta la caja. Administración y detalle viven en **SCR-06 Mis cajas**; Reportes solo muestra un resumen con enlace.
+- **Distribución (RF28):** Por caja, sobre su total de ventas. Se configura en el detalle de SCR-06. Ej. Dulces: 60% inversiones / 40% ahorros.
+- **Flujo de jornada típico:** Abrir sesión → vender (ítems a su fondo) / gastos de gaveta → cerrar arqueo → ventas bloqueadas hasta nueva apertura.
 ## 7. Prácticas de navegación aplicadas
 
 | Práctica | Detalle |
