@@ -19,6 +19,17 @@ ID: 9415363589674561809
 4. Reportes - JEVACRIS
     ID: 26fa51e0eec34b7d882604412b459a76
 
+5. Apertura de Caja Desktop - JEVACRIS
+    ID: 63f7400dd02f4b0d9eacd9e40a01c744
+
+6. Historial de Cierres - JEVACRIS Desktop
+    ID: 82b7b0bf69f34a6ab3e11a1a83373659
+
+7. Cierre de Caja Desktop - JEVACRIS
+    ID: aad89a83a8634db58f38c681f9538aad
+
+Use a utility like `curl -L` to download the hosted URLs.
+
 ## Stitch Instructions for the Screen Mobile System Inventario JEVACRIS
 
 Get the images and code for the following Stitch project's screens:

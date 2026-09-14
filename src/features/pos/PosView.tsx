@@ -47,7 +47,11 @@ const FRACTIONAL_BULK_UNITS = [
   'lb'
 ];
 
-export const PosView: React.FC = () => {
+interface PosViewProps {
+  onGoToCashShifts?: () => void;
+}
+
+export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -1448,7 +1452,11 @@ export const PosView: React.FC = () => {
           </div>
         )}
       </Modal>
-      <CashSessionModal isOpen={sessionModalOpen} onClose={() => setSessionModalOpen(false)} />
+      <CashSessionModal
+        isOpen={sessionModalOpen}
+        onClose={() => setSessionModalOpen(false)}
+        onNavigateToCashShifts={onGoToCashShifts}
+      />
     </div>
   );
 };

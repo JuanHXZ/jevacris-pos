@@ -13,14 +13,15 @@ import {
   KeyRound,
   Terminal,
   CloudOff,
-  CircleDollarSign
+  CircleDollarSign,
+  ReceiptText
 } from 'lucide-react';
 import { useSync } from '../../hooks/useSync';
 import { SideNavBar } from './SideNavBar';
 import { isDevMode, setDevMode } from '../../db';
 import { DevModeBanner } from '../dev/DevModeBanner';
 
-export type TabId = 'pos' | 'inventory' | 'stock' | 'cash' | 'reports';
+export type TabId = 'pos' | 'inventory' | 'stock' | 'cash-shifts' | 'cash' | 'reports';
 
 interface AppShellProps {
   activeTab: TabId;
@@ -68,6 +69,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     { id: 'pos' as TabId, label: 'Venta Rápida', icon: ShoppingCart },
     { id: 'inventory' as TabId, label: 'Inventario', icon: Package },
     { id: 'stock' as TabId, label: 'Entradas', icon: ArrowDownToLine },
+    { id: 'cash-shifts' as TabId, label: 'Caja y turnos', icon: ReceiptText },
     { id: 'cash' as TabId, label: 'Cajas', icon: Wallet },
     { id: 'reports' as TabId, label: 'Caja & Reportes', icon: BarChart3 }
   ];
@@ -350,7 +352,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-around',
-          zIndex: 100,
+          zIndex: 1100,
           padding: '0 8px'
         }}
         className="mobile-bottom-nav"

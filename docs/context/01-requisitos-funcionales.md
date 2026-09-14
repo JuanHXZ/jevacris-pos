@@ -52,13 +52,25 @@
 | RF19 | Integración API o importación directa de reportes desde plataformas de corresponsalía | Media | Fase 2 | Automatización adicional sobre el registro manual de ganancias externas del MVP. |
 | RF20 | **Exportación de reportes a Excel / PDF / CSV** y respaldos automáticos en la nube | Media | Fase 2 | Generación de archivos descargables con el detalle de ventas, arqueos y ganancias para contabilidad y archivo histórico. |
 | RF21 | Gestión de múltiples usuarios o turnos de caja | Baja | Fase 2 | El negocio es unipersonal actualmente. |
-| RF22 | **Apertura y cierre de jornada POS (Arqueo)** con registro de gastos operativos varios. **Una sesión operativa** (gaveta física). **Bloqueo de ventas** si no hay sesión abierta o tras el cierre. Independiente de los fondos contables (RF27). | Alta | Fase 2 — slice cajas | Compara el efectivo físico contado al abrir y cerrar contra el sistema. Decisiones: ADR-012. Los fondos por línea de producto no multiplican la apertura/cierre. |
+| RF22 | **Apertura y cierre de jornada POS (Arqueo de Caja)** — Gestión completa del ciclo de turno: apertura con base/denominaciones, gastos de gaveta, cierre con arqueo ciego/comparativo, bloqueo de ventas y auditoría Z. | Alta | Must-Have (En curso) | Garantiza el control estricto del dinero físico en mostrador, previene descuadres y cumple el flujo operativo real del negocio. Decisiones: ADR-012. |
 | RF23 | **Bloqueo de acceso por PIN local** | Alta | Fase 2 | Resuelve el acceso seguro sin depender de conexión a internet ni costos de OTP por SMS/WhatsApp (ver ADR-008). |
 | RF24 | **Fotos de productos en el catálogo alojadas en Cloudinary** | Media | Fase 2 | Subida y visualización de imágenes de productos al crear o editar desde el modal de catálogo, almacenadas en Cloudinary con URL guardada en la base de datos (ver ADR-010). |
 | RF25 | **Gestión de proveedores**: alta/edición de proveedores y vinculación opcional al crear productos o registrar entradas de stock | Media | Fase 2 | Permite trazabilidad de compras por proveedor y comparar costos entre distintos distribuidores. |
 | RF26 | **Visualización de detalle completo por día específico y exportación histórica** | Media | Fase 2 | Permite consultar mediante un selector de fecha el reporte exhaustivo de cualquier día pasado (transacciones desglosadas, medios de pago, ganancias, arqueo) y exportarlo a Excel/PDF. |
 | RF27 | **Cajas de facturación (fondos contables):** siempre existe **Caja Principal**; se pueden crear más (ej. Caja Dulces). Cada producto se asigna a **una** caja. Cada caja muestra **total ventas** y **total ganancias**. | Alta | Fase 2 — slice cajas | La Principal se crea automáticamente y se asigna a todos los productos actuales. RF27 ya no queda diferido. Ver RN-C01…RN-C09 y ADR-011. |
 | RF28 | **Distribución de ingresos por caja:** cada caja tiene sus propios rubros y porcentajes (suma 100%). Ej. Caja Dulces: 60% inversiones / 40% ahorros. | Alta | Fase 2 — slice cajas | Deja de ser un único 60/30/10 global. La distribución se calcula sobre el **total de ventas de esa caja**. Ver ADR-009. |
+
+### Desglose de Funcionalidades — Módulo de Apertura y Cierre de Caja (RF22)
+
+| Sub-ID | Feature / Capacidad | Prioridad | Clasificación | Justificación / Notas |
+|--------|---------------------|-----------|---------------|------------------------|
+| RF22.1 | **Apertura de Caja con Base y Desglose**: Pantalla dedicada ("Caja y turnos") para abrir jornada ingresando monto base o desglosando billetes/monedas colombianas, visualizando resumen del turno anterior. | Alta | Must-Have MVP | Permite arrancar la jornada con claridad sobre el fondo de sencillo disponible en mostrador. |
+| RF22.2 | **Gate de Ventas y Navegación No Bloqueante**: Modal informativo en POS que guía al usuario a abrir caja si no hay sesión activa, manteniendo el menú lateral libre y permitiendo operar Inventario, Stock y Reportes. | Alta | Must-Have MVP | Evita ventas sin control de gaveta sin frustrar al usuario al permitirle consultar precios y registrar compras. |
+| RF22.3 | **Control de Gastos Operativos de Gaveta**: Registro de salidas de efectivo durante el turno (concepto, valor, hora) afectando el balance en tiempo real. | Alta | Must-Have MVP | Esencial para que el arqueo al cierre cuadre con las compras menores de la tienda (panadería, aseo, etc.). |
+| RF22.4 | **Cierre de Caja y Arqueo Ciego/Comparativo**: Pantalla de cierre donde se ingresa el efectivo físico contado, se compara contra lo esperado (`base + ventas efectivo - gastos`), se calcula descuadre (sobrante/faltante) y se agregan observaciones. | Alta | Must-Have MVP | Cierra el ciclo de responsabilidad del cajero e impide ventas posteriores sin nueva apertura. |
+| RF22.5 | **Historial de Cierres y Comprobante Arqueo Z**: Consulta de turnos cerrados con filtros (todos, cuadrados, con descuadre), desglose completo de Arqueo Z y exportación de reporte a CSV. | Alta | Must-Have MVP | Auditoría y control histórico del propietario sobre los turnos pasados y pérdidas/sobrantes. |
+| RF22.6 | **Sangría / Retiro Parcial de Caja (Drop)**: Retiros seguros de efectivo a caja fuerte durante el turno por exceso de liquidez. | Media | Nice-to-Have / Fase 2 | Mejora de seguridad para días de alto volumen de ventas en efectivo. |
+| RF22.7 | **Impresión de Comprobante Z en Impresora Térmica**: Generación de ticket físico vía protocolo ESC/POS (USB/Bluetooth). | Baja | Nice-to-Have / Fase 2 | Automatización adicional; la pantalla y exportación CSV cubren la necesidad actual. |
 
 ### Reglas de negocio RF22 (Apertura / Cierre de jornada POS — validadas)
 
@@ -74,7 +86,8 @@ La **sesión** es la jornada del mostrador (una gaveta física). Los **fondos** 
 | RN-06 | **Gastos en sesión** | Los gastos operativos se registran contra la sesión (efectivo de la gaveta) y se descuentan del arqueo. |
 | RN-07 | **Efectivo esperado al cierre** | `closing_cash_calculated = opening_cash + Σ(ventas cash.total_amount) − Σ(gastos de la sesión)`. Las transferencias no suman a la gaveta. |
 | RN-08 | **Diferencia de arqueo** | `difference = closing_cash_counted − closing_cash_calculated` (positivo = sobrante, negativo = faltante). |
-| RN-09 | **Alcance de este slice** | RF22 + RF27 + RF28 van juntos. Fuera: RF21 (turnos), RF20/RF26 (exportación). |
+| RN-09 | **Navegación no bloqueante** | Si no hay sesión abierta, el bloqueo es funcional en el POS. El menú de navegación lateral (`SideNavBar`) y navegación móvil permanecen 100% interactivos y sin overlays que los oscurezcan o difuminen. |
+| RN-10 | **Alcance de este slice** | RF22 + RF27 + RF28 van coordinados. Fuera: RF21 (turnos concurrentes), RF20/RF26 (exportación avanzada). |
 
 ### Reglas de negocio RF27 / RF28 (Fondos y distribución — validadas)
 

@@ -6,7 +6,8 @@ import {
   BarChart3,
   Plus,
   Wallet,
-  Settings
+  Settings,
+  ReceiptText
 } from 'lucide-react';
 import { TabId } from './AppShell';
 
@@ -40,6 +41,11 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
       icon: ArrowDownToLine
     },
     {
+      id: 'cash-shifts' as TabId,
+      label: 'Caja y turnos',
+      icon: ReceiptText
+    },
+    {
       id: 'cash' as TabId,
       label: 'Mis cajas',
       icon: Wallet
@@ -69,7 +75,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
         padding: '32px 24px',
         boxSizing: 'border-box',
         userSelect: 'none',
-        zIndex: 50
+        zIndex: 1100
       }}
     >
       {/* Brand Header */}

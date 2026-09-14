@@ -12,12 +12,13 @@ import { usePinLock } from './hooks/usePinLock';
 import { PinLockScreen } from './components/auth/PinLockScreen';
 import { PinSettingsModal } from './components/auth/PinSettingsModal';
 import { CashSessionModal } from './features/cash/components/CashSessionModal';
+import { CashOpeningView } from './features/cash/CashOpeningView';
+import { CashClosingView } from './features/cash/CashClosingView';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabId>('pos');
   const [isInitializing, setIsInitializing] = useState(true);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [isCloseCashModalOpen, setIsCloseCashModalOpen] = useState(false);
   const openCashSession = useLiveQuery(
     async () => (await db.cashSessions.filter((session) => session.status === 'open').first()) ?? null,
     []
@@ -104,11 +105,25 @@ export function App() {
         onLock={lock}
         onOpenPinSettings={() => setIsPinModalOpen(true)}
         hasOpenCashSession={Boolean(openCashSession)}
-        onCloseCashSession={() => setIsCloseCashModalOpen(true)}
+        onCloseCashSession={() => setActiveTab('cash-shifts')}
       >
-        {activeTab === 'pos' && <PosView />}
+        {activeTab === 'pos' && <PosView onGoToCashShifts={() => setActiveTab('cash-shifts')} />}
         {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'stock' && <StockView />}
+        {activeTab === 'cash-shifts' && (
+          openCashSession ? (
+            <CashClosingView
+              onCloseSuccess={() => setActiveTab('pos')}
+              onGoToSales={() => setActiveTab('pos')}
+            />
+          ) : (
+            <CashOpeningView
+              onOpenSuccess={() => setActiveTab('pos')}
+              onCancel={() => setActiveTab('pos')}
+              onGoToSales={() => setActiveTab('pos')}
+            />
+          )
+        )}
         {activeTab === 'cash' && <CashView />}
         {activeTab === 'reports' && <ReportsView onGoToCash={() => setActiveTab('cash')} />}
       </AppShell>
@@ -129,18 +144,14 @@ export function App() {
         isOpen={
           !isInitializing &&
           openCashSession === null &&
-          activeTab !== 'reports' &&
+          activeTab === 'pos' &&
           !(isPinConfigured && isLocked)
         }
         onClose={() => undefined}
         initialMode="open"
         isDismissible={false}
-      />
-
-      <CashSessionModal
-        isOpen={isCloseCashModalOpen}
-        onClose={() => setIsCloseCashModalOpen(false)}
-        initialMode="close"
+        preserveSidebar={true}
+        onNavigateToCashShifts={() => setActiveTab('cash-shifts')}
       />
     </>
   );

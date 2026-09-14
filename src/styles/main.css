@@ -172,3 +172,39 @@ input:focus, select:focus, textarea:focus {
 .pin-shake-anim {
   animation: pinShake 0.45s ease-in-out;
 }
+
+/* Modal Overlay & Sidebar Preservation */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(49, 3, 68, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  z-index: 1000;
+}
+
+.modal-overlay.preserve-sidebar {
+  left: 288px;
+}
+
+@media (max-width: 768px) {
+  .modal-overlay.preserve-sidebar {
+    left: 0;
+    bottom: 68px;
+  }
+}
+
+@media (max-width: 540px) {
+  .cash-modal-capabilities-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+

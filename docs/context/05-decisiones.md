@@ -147,6 +147,7 @@
   3. Efectivo esperado = `opening_cash + Σ ventas cash − Σ gastos`.
   4. Diferencia = contado − calculado.
   5. La atribución a Principal/Dulces es RF27 sobre ítems, no sobre la sesión.
-- **Razón:** Disciplina de jornada tipo POS profesional, sin N aperturas por fondo.
-- **Fuente de la decisión:** Validación previa (gate de ventas) + ajuste 2026-09-10 (convive con múltiples fondos).
-- **Cambio respecto a la versión anterior:** ya no dice “no acoplar RF27”; se acopla como fondos, no como sesiones múltiples.
+  6. **Sincronización Híbrida (Dexie + Supabase):** Apertura, gastos y cierre se persisten primero en IndexedDB (`cashSessions`, `expenses`) con `synced = false` para operar 100% offline. `SyncEngine` sincroniza bidireccionalmente hacia las tablas `cash_sessions` y `expenses` en Supabase de forma periódica (cada 30s) o al recuperar conectividad (`online`), asegurando que la auditoría en la nube refleje exactamente los turnos locales.
+- **Razón:** Disciplina de jornada tipo POS profesional, sin N aperturas por fondo y con continuidad operativa offline garantizada.
+- **Fuente de la decisión:** Validación previa (gate de ventas) + ajuste 2026-09-10 (convive con múltiples fondos y sync en la nube).
+- **Cambio respecto a la versión anterior:** explicita la sincronización bidireccional con Supabase de sesiones y gastos de gaveta.

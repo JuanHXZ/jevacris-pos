@@ -9,6 +9,7 @@ export interface ModalProps {
   children: React.ReactNode;
   maxWidth?: string;
   isDismissible?: boolean;
+  preserveSidebar?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -18,7 +19,8 @@ export const Modal: React.FC<ModalProps> = ({
   subtitle,
   children,
   maxWidth = '560px',
-  isDismissible = true
+  isDismissible = true,
+  preserveSidebar = false
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -34,20 +36,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(49, 3, 68, 0.4)',
-        backdropFilter: 'blur(12px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px 16px',
-        zIndex: 1000
-      }}
+      className={`modal-overlay${preserveSidebar ? ' preserve-sidebar' : ''}`}
       onClick={isDismissible ? onClose : undefined}
     >
       <div
