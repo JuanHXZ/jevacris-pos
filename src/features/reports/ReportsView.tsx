@@ -16,11 +16,12 @@ import { reportsRepository, type WeeklyDayData } from '../../repositories/report
 import { Modal } from '../../components/ui/Modal';
 import { DayTransactionsModal } from './components/DayTransactionsModal';
 import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/currency';
+import { getLocalDateString } from '../../utils/date';
 import type { DailySummary } from '../../types';
 
 export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    getLocalDateString()
   );
   const [summary, setSummary] = useState<DailySummary>({
     totalTransactions: 0,
@@ -238,7 +239,7 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
           >
             <Calendar size={14} color="#7a4c8c" />
             <span>
-              {selectedDate === new Date().toISOString().split('T')[0] ? 'HOY' : selectedDate}
+              {selectedDate === getLocalDateString() ? 'HOY' : selectedDate}
             </span>
           </button>
 
@@ -950,7 +951,7 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
             <button
               type="button"
               onClick={() => {
-                setSelectedDate(new Date().toISOString().split('T')[0]);
+                setSelectedDate(getLocalDateString());
                 setIsDatePickerOpen(false);
               }}
               style={{

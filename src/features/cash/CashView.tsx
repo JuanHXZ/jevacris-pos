@@ -5,6 +5,7 @@ import { db } from '../../db';
 import { reportsRepository } from '../../repositories/reportsRepository';
 import { cashRegisterRepository } from '../../repositories/cashRegisterRepository';
 import { formatCOP } from '../../utils/currency';
+import { getLocalDateString } from '../../utils/date';
 import { Modal } from '../../components/ui/Modal';
 import { CashRegisterFormModal } from './components/CashRegisterFormModal';
 import { CashRegisterDetailModal } from './components/CashRegisterDetailModal';
@@ -16,7 +17,7 @@ export const CashView: React.FC = () => {
   const [detailRegister, setDetailRegister] = useState<CashRegister | null>(null);
   const [editing, setEditing] = useState<CashRegister | null>(null);
   const [editingLines, setEditingLines] = useState<CashRegisterDistributionLine[]>([]);
-  const dateStr = new Date().toISOString().split('T')[0];
+  const dateStr = getLocalDateString();
 
   const sessionTick = useLiveQuery(() => db.saleItems.count());
   const registerTick = useLiveQuery(() => db.cashRegisters.count());

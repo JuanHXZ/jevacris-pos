@@ -3,6 +3,7 @@ import type { CashRegisterSummary, DailySummary, ExternalEarning, Sale, SaleItem
 import { cashRegisterRepository } from './cashRegisterRepository';
 import { cashSessionRepository } from './cashSessionRepository';
 import { ensurePrincipalCashRegister } from '../db/cashBootstrap';
+import { getLocalDateString, toLocalDateString } from '../utils/date';
 
 export interface WeeklyDayData {
   dayName: string;
@@ -15,10 +16,10 @@ export interface WeeklyDayData {
 export const reportsRepository = {
   async getDailySummary(dateString?: string): Promise<DailySummary> {
     // Formato YYYY-MM-DD
-    const targetDate = dateString || new Date().toISOString().split('T')[0];
+    const targetDate = dateString || getLocalDateString();
 
     const allSales = await db.sales.toArray();
-    const todaySales = allSales.filter((s) => s.saleDate.startsWith(targetDate));
+    const todaySales = allSales.filter((s) => toLocalDateString(s.saleDate) === targetDate);
 
     let cashSales = 0;
     let transferSales = 0;
@@ -62,10 +63,10 @@ export const reportsRepository = {
     const today = targetDateStr ? new Date(targetDateStr + 'T12:00:00') : new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayStr = getLocalDateString(yesterday);
 
     const allSales = await db.sales.toArray();
-    const yesterdaySales = allSales.filter((s) => s.saleDate.startsWith(yesterdayStr));
+    const yesterdaySales = allSales.filter((s) => toLocalDateString(s.saleDate) === yesterdayStr);
     return yesterdaySales.reduce((sum, s) => sum + s.totalAmount, 0);
   },
 
@@ -82,14 +83,14 @@ export const reportsRepository = {
     const dayNames = ['LUN', 'MAR', 'MIE', 'JUE', 'VIE', 'SAB', 'DOM'];
     const fullDayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
 
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = getLocalDateString(d);
 
-      const daySales = allSales.filter((s) => s.saleDate.startsWith(dateStr));
+      const daySales = allSales.filter((s) => toLocalDateString(s.saleDate) === dateStr);
       const totalSales = daySales.reduce((sum, s) => sum + s.totalAmount, 0);
 
       days.push({
@@ -127,15 +128,15 @@ export const reportsRepository = {
   },
 
   async getExternalEarningsByDate(dateString?: string): Promise<ExternalEarning[]> {
-    const targetDate = dateString || new Date().toISOString().split('T')[0];
+    const targetDate = dateString || getLocalDateString();
     return await db.externalEarnings.where('earningDate').equals(targetDate).toArray();
   },
 
   async getDayTransactions(dateString?: string): Promise<Sale[]> {
-    const targetDate = dateString || new Date().toISOString().split('T')[0];
+    const targetDate = dateString || getLocalDateString();
     const allSales = await db.sales.toArray();
     const daySales = allSales
-      .filter((s) => s.saleDate.startsWith(targetDate))
+      .filter((s) => toLocalDateString(s.saleDate) === targetDate)
       .sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
 
     const daySaleIds = new Set(daySales.map((s) => s.id));
@@ -162,10 +163,10 @@ export const reportsRepository = {
       cashRegisterDistributionLines: db.cashRegisterDistributionLines,
       products: db.products
     });
-    const targetDate = dateString || new Date().toISOString().split('T')[0];
+    const targetDate = dateString || getLocalDateString();
     const registers = await cashRegisterRepository.getAll(true);
     const allSales = await db.sales.toArray();
-    const daySaleIds = new Set(allSales.filter((s) => s.saleDate.startsWith(targetDate)).map((s) => s.id));
+    const daySaleIds = new Set(allSales.filter((s) => toLocalDateString(s.saleDate) === targetDate).map((s) => s.id));
     const items = (await db.saleItems.toArray()).filter((item) => daySaleIds.has(item.saleId));
 
     const summaries: CashRegisterSummary[] = [];
