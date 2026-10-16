@@ -1,9 +1,27 @@
 import { db } from '../db';
-import type { CashRegisterSummary, DailySummary, ExternalEarning, Sale, SaleItem } from '../types';
+import type {
+  CashRegisterSummary,
+  DailyBreakdownRow,
+  DailySummary,
+  EnrichedPeriodSale,
+  ExternalEarning,
+  PeriodReportData,
+  ReportDateRange,
+  Sale,
+  SaleItem,
+  TopProductRow
+} from '../types';
+import { PRINCIPAL_CASH_REGISTER_ID } from '../types';
 import { cashRegisterRepository } from './cashRegisterRepository';
 import { cashSessionRepository } from './cashSessionRepository';
 import { ensurePrincipalCashRegister } from '../db/cashBootstrap';
-import { getLocalDateString, toLocalDateString } from '../utils/date';
+import {
+  enumerateDateStringsBetween,
+  getLocalDateString,
+  isDateStrWithinRange,
+  isIsoWithinRange,
+  toLocalDateString
+} from '../utils/date';
 
 export interface WeeklyDayData {
   dayName: string;
@@ -199,5 +217,257 @@ export const reportsRepository = {
 
   async getOpenSession() {
     return cashSessionRepository.getOpenSession();
+  },
+
+  async getPeriodReportData(range: ReportDateRange): Promise<PeriodReportData> {
+    await ensurePrincipalCashRegister({
+      cashRegisters: db.cashRegisters,
+      cashRegisterDistributionLines: db.cashRegisterDistributionLines,
+      products: db.products
+    });
+
+    const [allSales, allSaleItems, allExternal, allSessions, allExpenses, registers] = await Promise.all([
+      db.sales.toArray(),
+      db.saleItems.toArray(),
+      db.externalEarnings.toArray(),
+      db.cashSessions.toArray(),
+      db.expenses.toArray(),
+      cashRegisterRepository.getAll(true)
+    ]);
+
+    const registerNamesById: Record<string, string> = {};
+    for (const r of registers) {
+      registerNamesById[r.id] = r.name;
+    }
+
+    // 1. Filtrar ventas en el rango ISO
+    const periodSales = allSales
+      .filter((s) => isIsoWithinRange(s.saleDate, range.startIso, range.endIso))
+      .sort((a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime());
+
+    const periodSaleIds = new Set(periodSales.map((s) => s.id));
+    const periodItems = allSaleItems.filter((item) => periodSaleIds.has(item.saleId));
+
+    const itemsBySaleId = new Map<string, SaleItem[]>();
+    for (const item of periodItems) {
+      if (!itemsBySaleId.has(item.saleId)) {
+        itemsBySaleId.set(item.saleId, []);
+      }
+      itemsBySaleId.get(item.saleId)!.push(item);
+    }
+
+    const salesWithItems: EnrichedPeriodSale[] = periodSales.map((sale) => ({
+      ...sale,
+      items: itemsBySaleId.get(sale.id) || sale.items || [],
+      registerNamesById
+    }));
+
+    // 2. Filtrar ganancias externas en el rango de fechas (YYYY-MM-DD)
+    const externalEarningsList = allExternal
+      .filter((e) => isDateStrWithinRange(e.earningDate, range.startDateStr, range.endDateStr))
+      .sort((a, b) => b.earningDate.localeCompare(a.earningDate));
+
+    // 3. Filtrar sesiones de caja y gastos en el rango ISO
+    const cashSessions = allSessions
+      .filter((cs) => {
+        const refIso = cs.closedAt || cs.openedAt;
+        return isIsoWithinRange(refIso, range.startIso, range.endIso);
+      })
+      .sort((a, b) => new Date(b.closedAt || b.openedAt).getTime() - new Date(a.closedAt || a.openedAt).getTime());
+
+    const expenses = allExpenses
+      .filter((ex) => isIsoWithinRange(ex.expenseDate, range.startIso, range.endIso))
+      .sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime());
+
+    // 4. Calcular métricas acumuladas (Summary)
+    let cashSales = 0;
+    let transferSales = 0;
+    let totalSales = 0;
+
+    for (const sale of periodSales) {
+      totalSales += sale.totalAmount;
+      if (sale.paymentMethod === 'cash') {
+        cashSales += sale.totalAmount;
+      } else {
+        transferSales += sale.totalAmount;
+      }
+    }
+
+    // Regla ADR-004: solo productos físicos generan profit directo en sale_items
+    const physicalProfit = periodItems
+      .filter((item) => item.productType === 'physical')
+      .reduce((sum, item) => sum + item.profit, 0);
+
+    const externalEarningsTotal = externalEarningsList.reduce((sum, e) => sum + e.amount, 0);
+    const totalProfit = physicalProfit + externalEarningsTotal;
+    const expensesTotal = expenses.reduce((sum, ex) => sum + ex.amount, 0);
+    const netBalance = totalSales - expensesTotal;
+
+    // 5. Construir desglose diario (dailyBreakdown)
+    const allDatesInSpan = enumerateDateStringsBetween(range.startDateStr, range.endDateStr);
+    const salesByDate = new Map<string, Sale[]>();
+    for (const sale of periodSales) {
+      const dStr = toLocalDateString(sale.saleDate);
+      if (!salesByDate.has(dStr)) salesByDate.set(dStr, []);
+      salesByDate.get(dStr)!.push(sale);
+    }
+
+    const externalByDate = new Map<string, number>();
+    for (const ext of externalEarningsList) {
+      externalByDate.set(ext.earningDate, (externalByDate.get(ext.earningDate) || 0) + ext.amount);
+    }
+
+    const dailyBreakdown: DailyBreakdownRow[] = allDatesInSpan
+      .map((dateStr) => {
+        const dSales = salesByDate.get(dateStr) || [];
+        let dCash = 0;
+        let dTransfer = 0;
+        let dTotal = 0;
+        let dPhysProfit = 0;
+
+        for (const s of dSales) {
+          dTotal += s.totalAmount;
+          if (s.paymentMethod === 'cash') dCash += s.totalAmount;
+          else dTransfer += s.totalAmount;
+
+          const sItems = itemsBySaleId.get(s.id) || s.items || [];
+          for (const it of sItems) {
+            if (it.productType === 'physical') {
+              dPhysProfit += it.profit;
+            }
+          }
+        }
+
+        const dExt = externalByDate.get(dateStr) || 0;
+        return {
+          dateStr,
+          totalTransactions: dSales.length,
+          cashSales: dCash,
+          transferSales: dTransfer,
+          totalSales: dTotal,
+          physicalProfit: dPhysProfit,
+          externalEarnings: dExt,
+          totalProfit: dPhysProfit + dExt
+        };
+      })
+      .filter((row) => allDatesInSpan.length <= 7 || row.totalTransactions > 0 || row.externalEarnings > 0);
+
+    // 6. Construir ranking de productos vendidos (topProducts)
+    const productStatsMap = new Map<string, TopProductRow>();
+    for (const item of periodItems) {
+      const regId = item.cashRegisterId || PRINCIPAL_CASH_REGISTER_ID;
+      const regName = registerNamesById[regId] || 'Caja Principal';
+      const existing = productStatsMap.get(item.productId);
+      const itemProfit = item.productType === 'physical' ? item.profit : 0;
+
+      if (!existing) {
+        productStatsMap.set(item.productId, {
+          productId: item.productId,
+          productName: item.productName,
+          productType: item.productType,
+          cashRegisterName: regName,
+          quantitySold: item.quantity,
+          totalSales: item.subtotal,
+          totalProfit: itemProfit
+        });
+      } else {
+        existing.quantitySold += item.quantity;
+        existing.totalSales += item.subtotal;
+        existing.totalProfit += itemProfit;
+      }
+    }
+
+    const topProducts = Array.from(productStatsMap.values()).sort((a, b) => b.totalSales - a.totalSales);
+
+    // 7. Construir resumen y distribución por caja de facturación en el período (RF27 / RF28)
+    const cashRegisterSummaries: CashRegisterSummary[] = [];
+    for (const register of registers.filter((r) => r.isActive !== false || r.isPrincipal)) {
+      const regItems = periodItems.filter(
+        (item) => (item.cashRegisterId || PRINCIPAL_CASH_REGISTER_ID) === register.id
+      );
+      const regSales = regItems.reduce((sum, item) => sum + item.subtotal, 0);
+      const regProfit = regItems
+        .filter((item) => item.productType === 'physical')
+        .reduce((sum, item) => sum + item.profit, 0);
+      const lines = await cashRegisterRepository.getDistribution(register.id);
+
+      cashRegisterSummaries.push({
+        register,
+        totalSales: regSales,
+        totalProfit: regProfit,
+        distribution: lines.map((line) => ({
+          line,
+          suggestedAmount: regSales * (line.percentage / 100)
+        }))
+      });
+    }
+
+    return {
+      range,
+      generatedAt: new Date().toISOString(),
+      summary: {
+        totalTransactions: periodSales.length,
+        totalSales,
+        cashSales,
+        transferSales,
+        physicalProfit,
+        externalEarnings: externalEarningsTotal,
+        totalProfit,
+        expensesTotal,
+        netBalance
+      },
+      dailyBreakdown,
+      salesWithItems,
+      topProducts,
+      externalEarningsList,
+      cashSessions,
+      expenses,
+      cashRegisterSummaries
+    };
+  },
+
+  async getFullDatabaseBackup() {
+    const [
+      categories,
+      products,
+      sales,
+      saleItems,
+      stockEntries,
+      externalEarnings,
+      cashRegisters,
+      cashRegisterDistributionLines,
+      cashSessions,
+      expenses
+    ] = await Promise.all([
+      db.categories.toArray(),
+      db.products.toArray(),
+      db.sales.toArray(),
+      db.saleItems.toArray(),
+      db.stockEntries.toArray(),
+      db.externalEarnings.toArray(),
+      db.cashRegisters.toArray(),
+      db.cashRegisterDistributionLines.toArray(),
+      db.cashSessions.toArray(),
+      db.expenses.toArray()
+    ]);
+
+    return {
+      version: 2,
+      appName: 'JEVACRIS POS & INVENTORY',
+      exportedAt: new Date().toISOString(),
+      data: {
+        categories,
+        products,
+        sales,
+        saleItems,
+        stockEntries,
+        externalEarnings,
+        cashRegisters,
+        cashRegisterDistributionLines,
+        cashSessions,
+        expenses
+      }
+    };
   }
 };
+

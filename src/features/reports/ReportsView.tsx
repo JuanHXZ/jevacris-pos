@@ -15,6 +15,7 @@ import { db } from '../../db';
 import { reportsRepository, type WeeklyDayData } from '../../repositories/reportsRepository';
 import { Modal } from '../../components/ui/Modal';
 import { DayTransactionsModal } from './components/DayTransactionsModal';
+import { ExportReportModal } from './components/ExportReportModal';
 import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/currency';
 import { getLocalDateString } from '../../utils/date';
 import type { DailySummary } from '../../types';
@@ -37,6 +38,8 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
   const [isExternalModalOpen, setIsExternalModalOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
 
   // Formulario de Ganancia Externa
   const [platformName, setPlatformName] = useState('Recargas Móviles');
@@ -120,45 +123,6 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
     setIsExternalModalOpen(false);
     setEarningAmountRaw('');
     setEarningNotes('');
-  };
-
-  const handleExportBackup = async () => {
-    const cats = await db.categories.toArray();
-    const prods = await db.products.toArray();
-    const sales = await db.sales.toArray();
-    const saleItems = await db.saleItems.toArray();
-    const stockEntries = await db.stockEntries.toArray();
-    const externalEarnings = await db.externalEarnings.toArray();
-    const cashRegisters = await db.cashRegisters.toArray();
-    const cashRegisterDistributionLines = await db.cashRegisterDistributionLines.toArray();
-    const cashSessions = await db.cashSessions.toArray();
-    const expenses = await db.expenses.toArray();
-
-    const backup = {
-      version: 2,
-      appName: 'JEVACRIS POS & INVENTORY',
-      exportedAt: new Date().toISOString(),
-      data: {
-        categories: cats,
-        products: prods,
-        sales,
-        saleItems,
-        stockEntries,
-        externalEarnings,
-        cashRegisters,
-        cashRegisterDistributionLines,
-        cashSessions,
-        expenses
-      }
-    };
-
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `jevacris-reporte-caja-${selectedDate}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   // Producto más crítico para la recomendación inteligente
@@ -266,9 +230,9 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
             <span>GANANCIA EXT.</span>
           </button>
 
-          {/* Botón Exportar */}
+          {/* Botón Exportar (Excel / PDF por Rango de Fechas) */}
           <button
-            onClick={handleExportBackup}
+            onClick={() => setIsExportModalOpen(true)}
             style={{
               backgroundColor: '#fdf7ff',
               border: '1px solid #cfc3cf',
@@ -291,6 +255,7 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
           </button>
         </div>
       </div>
+
 
       {/* ========================================================================= */}
       {/* Bento Grid 60% / 40% (Figma 1:723)                                        */}
@@ -1153,6 +1118,16 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
         selectedDate={selectedDate}
         formattedDate={formatEditorialDate(selectedDate)}
       />
+
+      {/* ========================================================================= */}
+      {/* Modal: Exportar Reporte (Excel / PDF por Rango de Fechas)                 */}
+      {/* ========================================================================= */}
+      <ExportReportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        initialDate={selectedDate}
+      />
+
 
       <style>{`
         @media (max-width: 960px) {

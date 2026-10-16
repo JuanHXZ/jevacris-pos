@@ -177,3 +177,60 @@ export interface PinConfig {
   autoLockMinutes: number;
   updatedAt: string;
 }
+
+export type ReportPreset = '24h' | '3d' | '7d' | '30d' | 'custom';
+export type ReportExportFormat = 'excel' | 'pdf';
+
+export interface ReportDateRange {
+  preset: ReportPreset;
+  startIso: string;
+  endIso: string;
+  startDateStr: string;
+  endDateStr: string;
+  label: string;
+}
+
+export interface DailyBreakdownRow {
+  dateStr: string;
+  totalTransactions: number;
+  cashSales: number;
+  transferSales: number;
+  totalSales: number;
+  physicalProfit: number;
+  externalEarnings: number;
+  totalProfit: number;
+}
+
+export interface TopProductRow {
+  productId: string;
+  productName: string;
+  productType: ProductType;
+  cashRegisterName: string;
+  quantitySold: number;
+  totalSales: number;
+  totalProfit: number;
+}
+
+export interface EnrichedPeriodSale extends Sale {
+  items: SaleItem[];
+  registerNamesById: Record<string, string>;
+}
+
+export interface PeriodSummary extends DailySummary {
+  expensesTotal: number;
+  netBalance: number;
+}
+
+export interface PeriodReportData {
+  range: ReportDateRange;
+  generatedAt: string;
+  summary: PeriodSummary;
+  dailyBreakdown: DailyBreakdownRow[];
+  salesWithItems: EnrichedPeriodSale[];
+  topProducts: TopProductRow[];
+  externalEarningsList: ExternalEarning[];
+  cashSessions: CashSession[];
+  expenses: Expense[];
+  cashRegisterSummaries: CashRegisterSummary[];
+}
+
