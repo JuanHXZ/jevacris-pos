@@ -28,6 +28,9 @@ ID: 9415363589674561809
 7. Cierre de Caja Desktop - JEVACRIS
     ID: aad89a83a8634db58f38c681f9538aad
 
+8. Préstamos y Cuentas por Cobrar - JEVACRIS Desktop
+    ID: a3b61b940cea49f9bf2c35d45b73c2dd
+
 Use a utility like `curl -L` to download the hosted URLs.
 
 ## Stitch Instructions for the Screen Mobile System Inventario JEVACRIS

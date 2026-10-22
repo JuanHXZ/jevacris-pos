@@ -1,8 +1,8 @@
 # Estructura de BD (resumen) — JEVACRIS Sistema POS e Inventario
 
 > **Fuentes de verdad y sincronización de esquemas:**
-> 1. **Backend / Cloud (Nube):** [schema.sql](file:///c:/repo/antigravity-starter-kit/docs/context/schema.sql) define el esquema relacional en **Supabase (PostgreSQL)**.
-> 2. **Cliente / Local (PWA Offline):** El almacenamiento local en el navegador se gestiona mediante **Dexie.js (IndexedDB)** en código TypeScript (`src/db/index.ts` usando la sintaxis `.stores()`).
+> 1. **Backend / Cloud (Nube):** [schema.sql](file:///c:/repo/jevacris-pos/docs/context/schema.sql) define el esquema relacional en **Supabase (PostgreSQL)**.
+> 2. **Cliente / Local (PWA Offline):** El almacenamiento local en el navegador se gestiona mediante **Dexie.js (IndexedDB)** en código TypeScript (`src/db/index.ts` usando la sintaxis `.stores()`, actualmente en **versión 22**).
 >
 > ⚠️ **Regla de sincronización:** Dexie.js no interpreta sentencias SQL directamente. Toda adición, renombre o eliminación de tablas, columnas o índices en `schema.sql` debe replicarse manualmente en las definiciones de Dexie para mantener alineadas ambas capas.
 
@@ -40,6 +40,8 @@
   - `amount_received` (REAL, DEFAULT 0): Dinero entregado por el cliente (para cálculo de cambio en efectivo).
   - `change_given` (REAL, DEFAULT 0): Vueltas/cambio devuelto al cliente.
   - `cash_session_id` (TEXT, FK Opcional): Referencia a `cash_sessions(id)` — **requerida al confirmar venta cuando RF22 esté activo** (sesión abierta). Ventas históricas previas a RF22 pueden quedar en `NULL`.
+  - `debt_id` (TEXT, FK Opcional): Referencia a `debts(id)` cuando la venta se origina por el pago/abono de un fiado (RF18).
+  - `debt_payment_id` (TEXT, FK Opcional): Referencia a `debt_payments(id)` que originó la venta proporcional (RF18).
   - `notes` (TEXT, Opcional).
   - `created_at`, `updated_at` (TIMESTAMP WITH TIME ZONE).
 
@@ -49,7 +51,7 @@
   - `product_id` (TEXT, FK): Referencia a `products(id)`.
   - `product_name` (TEXT): Snapshot del nombre al momento de la venta.
   - `product_type` (TEXT, NOT NULL): `'physical'` o `'service'`.
-  - `quantity` (REAL, DEFAULT 1): Cantidad vendida.
+  - `quantity` (REAL, DEFAULT 1): Cantidad vendida (o fracción proporcional en abonos parciales de fiados).
   - `unit_price` (REAL): Snapshot del precio de venta unitario.
   - `unit_cost` (REAL): Snapshot del costo unitario al momento de la venta (para servicios se registra en 0).
   - `subtotal` (REAL): `quantity * unit_price`.
@@ -80,9 +82,9 @@
 
 ---
 
-## Modelo de Entidades Previstas para Fase 2 (slice cajas: RF22 + RF27 + RF28)
+## Modelo de Entidades de Fase 2 (Implementadas: RF18 + RF22 + RF27 + RF28)
 
-Hay **dos conceptos distintos**:
+Hay **dos conceptos distintos en caja**:
 - **Sesión POS** (`cash_sessions`): jornada / gaveta física. Una abierta a la vez.
 - **Fondo / caja de facturación** (`cash_registers`): a qué línea de negocio pertenece cada producto (Principal, Dulces, …).
 
@@ -130,12 +132,30 @@ closing_cash_calculated =
 
 El singleton global `distribution_settings` **queda descartado** (ya no hay un único 60/30/10 para todo el negocio).
 
-5. **`debts`, `debt_items`, `debt_payments` (Módulo de Fiados — RF18):**
-   - `debts`: `id`, `debtor_name`, `total_amount`, `paid_amount`, `status` ('pending', 'partial', 'paid'), `created_at`.
-   - `debt_items`: `id`, `debt_id`, `product_id`, `product_name`, `quantity`, `unit_price`, `subtotal`.
-   - `debt_payments`: `id`, `debt_id`, `amount`, `payment_method`, `created_at`.
+### RF18 — Préstamos y Fiados (Cuentas por Cobrar — Implementado en Dexie v22 y Supabase)
 
-6. **`suppliers` (Proveedores — RF25):**
+5. **`debts`, `debt_items`, `debt_payments` (Módulo de Fiados — RF18 / ADR-013):**
+   - **`debts` (Ticket de fiado):**
+     - `id` (TEXT, PK): Identificador único (ej. `debt-...`).
+     - `debtor_name` (TEXT, NOT NULL): Nombre de la persona a quien se le fía.
+     - `debtor_phone` (TEXT, Opcional): Teléfono de contacto.
+     - `debt_date` (TIMESTAMP WITH TIME ZONE, NOT NULL): Fecha y hora en que se entregó la mercancía fiada.
+     - `due_date` (DATE, Opcional): Fecha límite de pago opcional (inicia vacía en UI).
+     - `total_amount` (REAL, NOT NULL): Valor total fiado en el ticket.
+     - `total_cost` (REAL, NOT NULL, DEFAULT 0): Costo total de adquisición de los productos físicos fiados.
+     - `paid_amount` (REAL, NOT NULL, DEFAULT 0): Monto acumulado abonado hasta la fecha.
+     - `status` (TEXT, NOT NULL): `'pending'` (sin abonos), `'partial'` (con abono parcial) o `'paid'` (pagado en su totalidad).
+     - `notes` (TEXT, Opcional), `created_at`, `updated_at`.
+   - **`debt_items` (Detalle de productos/servicios por ticket de fiado):**
+     - `id` (TEXT, PK), `debt_id` (TEXT, FK a `debts(id)` ON DELETE CASCADE), `product_id` (TEXT, FK a `products(id)`).
+     - `product_name` (TEXT), `product_type` (`'physical'` | `'service'`), `quantity` (REAL), `unit_price` (REAL), `unit_cost` (REAL), `subtotal` (REAL), `profit` (REAL), `cash_register_id` (TEXT, FK snapshot a `cash_registers(id)`), `created_at`.
+   - **`debt_payments` (Historial de abonos y pagos de fiados):**
+     - `id` (TEXT, PK), `debt_id` (TEXT, FK a `debts(id)` ON DELETE CASCADE).
+     - `amount` (REAL, NOT NULL): Monto abonado en esta transacción.
+     - `payment_method` (`'cash'` | `'transfer'`), `payment_date` (TIMESTAMP WITH TIME ZONE, NOT NULL).
+     - `cash_session_id` (TEXT, FK a `cash_sessions(id)`), `sale_id` (TEXT, FK a `sales(id)`), `notes` (TEXT, Opcional), `created_at`, `updated_at`.
+
+6. **`suppliers` (Proveedores — RF25, previsto):**
    - `id`, `name`, `contact_phone`, `notes`, `created_at`.
 
 ---
@@ -151,24 +171,35 @@ El singleton global `distribution_settings` **queda descartado** (ya no hay un �
 - `cash_registers` 1 --- N `products` (RF27)
 - `cash_registers` 1 --- N `sale_items` (RF27, snapshot)
 - `cash_registers` 1 --- N `cash_register_distribution_lines` (RF28)
+- `debts` 1 --- N `debt_items` (RF18)
+- `debts` 1 --- N `debt_payments` (RF18)
+- `debt_payments` 1 --- 1 `sales` (RF18: cada abono genera su venta proporcional en el turno activo)
 
 ---
 
 ## Lógica automática activa (Triggers / Cascada de aplicación)
 
-1. **Al confirmar venta (`sales` + `sale_items`):**
+1. **Al confirmar venta directa (`sales` + `sale_items`):**
    - **Gate RF22:** Debe existir una `cash_session` con `status = 'open'`; la venta se graba con ese `cash_session_id`. Si no hay sesión abierta, se rechaza.
    - **Snapshot RF27:** cada ítem copia `cash_register_id` del producto (o Principal si faltara).
    - Para cada item donde `product_type == 'physical'`, se descuenta inventario.
    - Para `service`, NO se descuenta inventario y `profit` se fija en `0`.
-2. **Al registrar entrada de mercancía (`stock_entries`):**
+2. **Al registrar un nuevo Préstamo / Fiado (`debts` + `debt_items` — RF18):**
+   - Para cada ítem con `product_type == 'physical'`, se descuenta inmediatamente `products.current_stock`.
+   - Para `service`, no se descuenta inventario y `profit` / `unit_cost` quedan en `0`.
+   - **No** se crea fila en `sales` ni `sale_items` en ese momento (el fiado no cuenta como ingreso de caja hasta que se pague).
+3. **Al registrar un Abono o Pago de Fiado (`debt_payments` → `sales` + `sale_items` — RF18):**
+   - **Gate RF22:** Exige una `cash_session` con `status = 'open'`.
+   - Actualiza `debts.paid_amount = paid_amount + amount` y cambia `debts.status` a `'partial'` o `'paid'`.
+   - Crea automáticamente una venta en `sales` (vinculada con `debt_id`, `debt_payment_id` y `cash_session_id`) por el valor `amount` y genera `sale_items` proporcionales (`ratio = amount / debt.total_amount`) respetando el `cash_register_id` de cada ítem, **sin volver a descontar stock**.
+4. **Al registrar entrada de mercancía (`stock_entries`):**
    - Se incrementa el inventario y se actualiza el costo base:
      `UPDATE products SET current_stock = current_stock + entry.quantity, cost_price = CASE WHEN entry.unit_cost > 0 THEN entry.unit_cost ELSE cost_price END, updated_at = CURRENT_TIMESTAMP WHERE id = entry.product_id;`
-3. **Al abrir caja (`cash_sessions`):**
+5. **Al abrir caja (`cash_sessions`):**
    - Solo si no existe otra sesión `open`. Se crea con `opening_cash`, `status = 'open'`, `closed_at = NULL`.
-4. **Al cerrar caja (`cash_sessions`):**
+6. **Al cerrar caja (`cash_sessions`):**
    - Se calcula `closing_cash_calculated` (fórmula arriba), se registra `closing_cash_counted`, `difference`, `closed_at` y `status = 'closed'`.
-   - A partir de ese momento el POS no acepta ventas hasta una nueva apertura.
+   - A partir de ese momento el POS no acepta ventas ni abonos de fiados hasta una nueva apertura.
 
 ---
 

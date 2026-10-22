@@ -47,10 +47,11 @@
   src/
   ├── components/       # Componentes visuales reutilizables (UI: Button, Input, Modal, Badge)
   ├── features/
-  │   ├── pos/          # Pantalla POS, Carrito, Modal de Cobro & Vueltas
+  │   ├── pos/          # Pantalla POS, Carrito, Modal de Confirmación de Venta
   │   ├── inventory/    # Catálogo, Formulario de Producto, Cálculo de Margen
   │   ├── stock/        # Entradas de mercancía y compras
-  │   ├── reports/      # Dashboard, sesión POS, fondos, ganancias externas
+  │   ├── debts/        # RF18 Préstamos y Fiados (Tickets, Abonos y Detalle)
+  │   ├── reports/      # Dashboard, sesión POS, fondos, fiados, ganancias externas
   │   └── cash/         # RF22 sesión; RF27/RF28 fondos y distribución por caja
   ├── db/               # Configuración de Dexie, esquema y migraciones
   ├── repositories/     # Capa de acceso a datos (CRUD y queries especializadas)
@@ -151,3 +152,16 @@
 - **Razón:** Disciplina de jornada tipo POS profesional, sin N aperturas por fondo y con continuidad operativa offline garantizada.
 - **Fuente de la decisión:** Validación previa (gate de ventas) + ajuste 2026-09-10 (convive con múltiples fondos y sync en la nube).
 - **Cambio respecto a la versión anterior:** explicita la sincronización bidireccional con Supabase de sesiones y gastos de gaveta.
+
+---
+
+## ADR-013: Modelo Contable e Inventario para Préstamos y Fiados (RF18)
+- **Decisión:** Implementar el módulo de **Préstamos y Fiados** (`debts`, `debt_items`, `debt_payments`) desacoplando el momento de salida de inventario del momento de ingreso de caja/venta:
+  1. **Día del Fiado (Entrega de mercancía):** Se crea un ticket de fiado (`debts` + `debt_items`). Los productos físicos descuentan `products.current_stock` inmediatamente, pero **no** se crea ningún registro en `sales`. Los servicios/recargas también pueden incluirse en el fiado sin descontar inventario físico.
+  2. **Día del Abono o Pago Total (Caso B):** Cuando el cliente realiza un abono parcial o liquida la deuda (`debt_payments`), se exige una `cash_session` abierta (`status = 'open'`) y se genera automáticamente un registro en `sales` (con `debt_id` y `debt_payment_id`) junto con sus `sale_items` escalados proporcionalmente (`ratio = amount / debt.total_amount`), **sin volver a descontar stock**.
+- **Alternativas consideradas:**
+  - *Registrar la venta el mismo día del fiado con medio de pago "Crédito":* Descartada porque inflaría las ventas y utilidades del día en que no entró dinero real y complicaría el cuadre de caja cuando el cliente pague días después en efectivo o transferencia.
+  - *Solo permitir pago completo (Caso A):* Descartada a favor del Caso B porque en tiendas de barrio es habitual que los clientes realicen abonos parciales a su cuenta.
+  - *Agrupar toda la deuda en una cuenta corriente única por cliente sin separar tickets:* Descartada por preferencia explícita del usuario: organizar por **Ticket de Fiado (`#CR-XXXX`)** con filtro por persona permite trazabilidad exacta de qué productos se llevó en cada fecha.
+- **Razón:** Refleja fielmente el flujo real de caja e inventario del negocio, mantiene intacta la atribución por cajas de facturación (`cash_register_id` en los `sale_items` proporcionales) y ofrece visibilidad transparente en Reportes tanto de la mercancía entregada fiada como de la cartera pendiente y recaudada.
+- **Fuente de la decisión:** Validada por el usuario (Caso B: abonos parciales y pago total; organización por Ticket de Fiado filtrable por persona; soporte para productos físicos y servicios/recargas).

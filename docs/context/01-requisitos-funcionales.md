@@ -17,7 +17,7 @@
 | RF06 | Cálculo automático del subtotal y total de la venta | Alta | Must-Have MVP | Previene errores humanos y reduce el tiempo de espera del cliente. |
 | RF07 | Calculadora de cambio / vueltas integrada (ingreso de monto recibido y cálculo automático) | Alta | Must-Have MVP | Elimina la fricción y riesgo de error al dar cambio con billetes de alta denominación. |
 | RF08 | Selección de medio de pago (Efectivo / Transferencia - Nequi) | Alta | Must-Have MVP | Permite clasificar los ingresos del día para cuadre de caja exacto. |
-| RF09 | Confirmación de venta con registro automático de fecha y hora | Alta | Must-Have MVP | Elimina la tarea repetitiva de digitar fechas a mano. |
+| RF09 | Confirmación de venta mediante modal de verificación previa (detalle de productos, medio de pago, recibido/vueltas y doble confirmación al cancelar/vaciar carrito) y registro automático de fecha/hora | Alta | Must-Have MVP | Previene ventas duplicadas por doble clic accidental y elimina la tarea repetitiva de digitar fechas a mano. |
 | RF10 | Descuento automático de existencias del inventario al completar la venta (solo productos físicos) | Alta | Must-Have MVP | Mantiene el inventario actualizado en tiempo real sin depender del registro nocturno manual. |
 
 ## 3. Entradas de Mercancía (Compras / Reabastecimiento)
@@ -44,21 +44,21 @@
 
 ---
 
-## Fase 2 (fuera del MVP)
+## Fase 2 (Ampliaciones y Módulos Avanzados)
 
 | ID | Feature | Prioridad | Clasificación | Justificación / Notas |
 |----|---------|-----------|---------------|------------------------|
-| RF18 | **Módulo de Fiados / Cuentas por Cobrar** — Registrar persona a quien se le fía, valor total de la deuda, desglose de productos incluidos y fecha del fiado. Registro de abonos y cancelación total o parcial de la deuda. | Media | Fase 2 | Ampliado del alcance original ("cuentas por cobrar a familiares"): trazable a persona + productos + fecha, permitiendo cobrar con contexto exacto y gestionar abonos. |
+| RF18 | **Módulo de Préstamos y Fiados (Cuentas por Cobrar)** — Registro por ticket de fiado (`#CR-XXXX`) con cliente, productos/servicios fiados, fecha y vencimiento opcional. Descuento inmediato de inventario sin afectar ventas hasta el abono/pago total o parcial. | Alta | Implementado (En Producción) | Trazable por ticket y filtrable por persona; soporta abonos parciales/totales con reflejo contable en el día real del pago y métricas en Reportes. Ver RN-F01…RN-F06 y ADR-013. |
 | RF19 | Integración API o importación directa de reportes desde plataformas de corresponsalía | Media | Fase 2 | Automatización adicional sobre el registro manual de ganancias externas del MVP. |
-| RF20 | **Exportación de reportes a Excel / PDF / CSV** y respaldos automáticos en la nube | Media | Fase 2 | Generación de archivos descargables con el detalle de ventas, arqueos y ganancias para contabilidad y archivo histórico. |
+| RF20 | **Exportación de reportes a Excel / PDF / CSV** y respaldos automáticos en la nube | Media | Implementado (En Producción) | Generación de archivos descargables con el detalle de ventas, arqueos, fiados y ganancias para contabilidad y archivo histórico. |
 | RF21 | Gestión de múltiples usuarios o turnos de caja | Baja | Fase 2 | El negocio es unipersonal actualmente. |
-| RF22 | **Apertura y cierre de jornada POS (Arqueo de Caja)** — Gestión completa del ciclo de turno: apertura con base/denominaciones, gastos de gaveta, cierre con arqueo ciego/comparativo, bloqueo de ventas y auditoría Z. | Alta | Must-Have (En curso) | Garantiza el control estricto del dinero físico en mostrador, previene descuadres y cumple el flujo operativo real del negocio. Decisiones: ADR-012. |
+| RF22 | **Apertura y cierre de jornada POS (Arqueo de Caja)** — Gestión completa del ciclo de turno: apertura con base/denominaciones, gastos de gaveta, cierre con arqueo ciego/comparativo, bloqueo de ventas y auditoría Z. | Alta | Implementado (En Producción) | Garantiza el control estricto del dinero físico en mostrador, previene descuadres y cumple el flujo operativo real del negocio. Decisiones: ADR-012. |
 | RF23 | **Bloqueo de acceso por PIN local** | Alta | Fase 2 | Resuelve el acceso seguro sin depender de conexión a internet ni costos de OTP por SMS/WhatsApp (ver ADR-008). |
 | RF24 | **Fotos de productos en el catálogo alojadas en Cloudinary** | Media | Fase 2 | Subida y visualización de imágenes de productos al crear o editar desde el modal de catálogo, almacenadas en Cloudinary con URL guardada en la base de datos (ver ADR-010). |
 | RF25 | **Gestión de proveedores**: alta/edición de proveedores y vinculación opcional al crear productos o registrar entradas de stock | Media | Fase 2 | Permite trazabilidad de compras por proveedor y comparar costos entre distintos distribuidores. |
-| RF26 | **Visualización de detalle completo por día específico y exportación histórica** | Media | Fase 2 | Permite consultar mediante un selector de fecha el reporte exhaustivo de cualquier día pasado (transacciones desglosadas, medios de pago, ganancias, arqueo) y exportarlo a Excel/PDF. |
-| RF27 | **Cajas de facturación (fondos contables):** siempre existe **Caja Principal**; se pueden crear más (ej. Caja Dulces). Cada producto se asigna a **una** caja. Cada caja muestra **total ventas** y **total ganancias**. | Alta | Fase 2 — slice cajas | La Principal se crea automáticamente y se asigna a todos los productos actuales. RF27 ya no queda diferido. Ver RN-C01…RN-C09 y ADR-011. |
-| RF28 | **Distribución de ingresos por caja:** cada caja tiene sus propios rubros y porcentajes (suma 100%). Ej. Caja Dulces: 60% inversiones / 40% ahorros. | Alta | Fase 2 — slice cajas | Deja de ser un único 60/30/10 global. La distribución se calcula sobre el **total de ventas de esa caja**. Ver ADR-009. |
+| RF26 | **Visualización de detalle completo por día específico y exportación histórica** | Media | Implementado (En Producción) | Permite consultar mediante un selector de fecha/rango el reporte exhaustivo de cualquier día pasado (transacciones desglosadas, medios de pago, ganancias, fiados, arqueo) y exportarlo a Excel/PDF/CSV. |
+| RF27 | **Cajas de facturación (fondos contables):** siempre existe **Caja Principal**; se pueden crear más (ej. Caja Dulces). Cada producto se asigna a **una** caja. Cada caja muestra **total ventas** y **total ganancias**. | Alta | Implementado (En Producción) | La Principal se crea automáticamente y se asigna a todos los productos actuales. Ver RN-C01…RN-C09 y ADR-011. |
+| RF28 | **Distribución de ingresos por caja:** cada caja tiene sus propios rubros y porcentajes (suma 100%). Ej. Caja Dulces: 60% inversiones / 40% ahorros. | Alta | Implementado (En Producción) | Deja de ser un único 60/30/10 global. La distribución se calcula sobre el **total de ventas de esa caja**. Ver ADR-009. |
 
 ### Desglose de Funcionalidades — Módulo de Apertura y Cierre de Caja (RF22)
 
@@ -71,6 +71,17 @@
 | RF22.5 | **Historial de Cierres y Comprobante Arqueo Z**: Consulta de turnos cerrados con filtros (todos, cuadrados, con descuadre), desglose completo de Arqueo Z y exportación de reporte a CSV. | Alta | Must-Have MVP | Auditoría y control histórico del propietario sobre los turnos pasados y pérdidas/sobrantes. |
 | RF22.6 | **Sangría / Retiro Parcial de Caja (Drop)**: Retiros seguros de efectivo a caja fuerte durante el turno por exceso de liquidez. | Media | Nice-to-Have / Fase 2 | Mejora de seguridad para días de alto volumen de ventas en efectivo. |
 | RF22.7 | **Impresión de Comprobante Z en Impresora Térmica**: Generación de ticket físico vía protocolo ESC/POS (USB/Bluetooth). | Baja | Nice-to-Have / Fase 2 | Automatización adicional; la pantalla y exportación CSV cubren la necesidad actual. |
+
+### Reglas de negocio RF18 (Préstamos y Fiados — validadas e implementadas)
+
+| # | Regla | Detalle |
+|---|-------|---------|
+| RN-F01 | **Organización por Ticket de Fiado** | Cada préstamo se registra como un ticket independiente (`#CR-XXXX`) con fecha/hora, nombre del cliente (`debtor_name`), teléfono opcional, fecha límite opcional (vacía por defecto) y lista detallada de ítems (`debt_items`). Se permite filtrar por estado y por persona fiada. |
+| RN-F02 | **Descuento de stock en el día del fiado** | Al crear el fiado, los productos físicos (`product_type = 'physical'`) descuentan `current_stock` inmediatamente. Los servicios/recargas (`product_type = 'service'`) también pueden fiarse y no descuentan inventario físico. |
+| RN-F03 | **No es venta hasta el día del pago** | El día que se entrega el fiado **no** se crea registro en `sales` ni suma al efectivo/transferencias del turno; solo se registra como cartera entregada (`debts_given_total`) con su respectivo costo de mercancía (`debts_given_cost`). |
+| RN-F04 | **Abonos parciales y pago total (Caso B)** | Se permiten abonos parciales o liquidación total (`debt_payments`). Cada abono requiere una `cash_session` abierta (`status = 'open'`) y genera automáticamente una venta (`sales` + `sale_items` proporcionales al ratio `amount / debt.total_amount`) en la fecha real del pago, sin volver a descontar stock. |
+| RN-F05 | **Integración desde POS y vista dedicada** | Un fiado puede crearse tanto desde la vista **Préstamos y Fiados** (`SCR-05`) como directamente desde el carrito del **POS** (`SCR-01`, botón *"Dar Fiado / Crédito"*), el cual vacía el carrito tras confirmar el préstamo. |
+| RN-F06 | **Reflejo en Reportes y Exportación** | El módulo de Reportes (`SCR-04`) y los exportadores (PDF/Excel/CSV) incluyen la sección **Control de Fiados y Cartera**, desglosando fiados entregados en el período, costo de mercancía fiada, recaudos/abonos recibidos y cartera total pendiente en la calle. |
 
 ### Reglas de negocio RF22 (Apertura / Cierre de jornada POS — validadas)
 
@@ -87,7 +98,7 @@ La **sesión** es la jornada del mostrador (una gaveta física). Los **fondos** 
 | RN-07 | **Efectivo esperado al cierre** | `closing_cash_calculated = opening_cash + Σ(ventas cash.total_amount) − Σ(gastos de la sesión)`. Las transferencias no suman a la gaveta. |
 | RN-08 | **Diferencia de arqueo** | `difference = closing_cash_counted − closing_cash_calculated` (positivo = sobrante, negativo = faltante). |
 | RN-09 | **Navegación no bloqueante** | Si no hay sesión abierta, el bloqueo es funcional en el POS. El menú de navegación lateral (`SideNavBar`) y navegación móvil permanecen 100% interactivos y sin overlays que los oscurezcan o difuminen. |
-| RN-10 | **Alcance de este slice** | RF22 + RF27 + RF28 van coordinados. Fuera: RF21 (turnos concurrentes), RF20/RF26 (exportación avanzada). |
+| RN-10 | **Alcance de este slice** | RF22 + RF27 + RF28 van coordinados. Fuera: RF21 (turnos concurrentes). |
 
 ### Reglas de negocio RF27 / RF28 (Fondos y distribución — validadas)
 
@@ -106,11 +117,12 @@ La **sesión** es la jornada del mostrador (una gaveta física). Los **fondos** 
 
 ### Notas técnicas para la fase de Tech Lead
 
+- **RF18 (fiados y cuentas por cobrar):** `debts`, `debt_items`, `debt_payments` y columnas `sales.debt_id`, `sales.debt_payment_id` (Dexie v22 + Supabase). Ver ADR-013.
 - **RF22 (sesión POS + gate):** `cash_sessions`, `expenses`, `sales.cash_session_id`. Una sola sesión `open`. Ver ADR-012.
 - **RF27 (fondos):** `cash_registers` con `is_principal`; `products.cash_register_id` NOT NULL (tras migración); `sale_items.cash_register_id` snapshot. UI: `features/cash` → SCR-06. Ver ADR-011.
 - **RF28 (distribución por caja):** `cash_register_distribution_lines` (rubro + porcentaje por `cash_register_id`). Sustituye el singleton global `distribution_settings`. Ver ADR-009.
 - **RF24 (fotos con Cloudinary):** URL HTTPS en `products.image_url`.
-- **RF26 (reporte diario y exportación):** consultas por fecha y CSV/Excel/PDF; fuera de este slice.
+- **RF26 / RF20 (reporte por rango de fechas y exportación):** consultas por fecha y exportación CSV/Excel/PDF implementadas en `reportsRepository.ts` y `reportExporters.ts`.
 
 ---
 
