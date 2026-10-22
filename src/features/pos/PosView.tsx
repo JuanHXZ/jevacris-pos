@@ -12,12 +12,14 @@ import {
   Package,
   Sparkles,
   X,
-  SlidersHorizontal
+  SlidersHorizontal,
+  HandCoins
 } from 'lucide-react';
 import { db } from '../../db';
 import { salesRepository, NoOpenSessionError } from '../../repositories/salesRepository';
 import { Modal } from '../../components/ui/Modal';
 import { CashSessionModal } from '../cash/components/CashSessionModal';
+import { NewDebtModal } from '../debts/components/NewDebtModal';
 import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/currency';
 import type { Product, CartItem, PaymentMethod } from '../../types';
 
@@ -49,6 +51,7 @@ const FRACTIONAL_BULK_UNITS = [
 
 interface PosViewProps {
   onGoToCashShifts?: () => void;
+  onGoToDebts?: () => void;
 }
 
 export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
@@ -57,11 +60,17 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [amountReceivedRaw, setAmountReceivedRaw] = useState<string>('');
-  const [successToast, setSuccessToast] = useState<{ total: number; change: number } | null>(null);
+  const [successToast, setSuccessToast] = useState<{
+    title?: string;
+    total: number;
+    change: number;
+    subtitle?: string;
+  } | null>(null);
 
   // Estado para Modal de Venta Fraccionada (Por Dinero vs Por Volumen)
   const [fractionalModalOpen, setFractionalModalOpen] = useState(false);
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
+  const [newDebtModalOpen, setNewDebtModalOpen] = useState(false);
   const [selectedBulkProduct, setSelectedBulkProduct] = useState<Product | null>(null);
   const [fractionalMode, setFractionalMode] = useState<'money' | 'quantity'>('money');
   const [moneyAmountRaw, setMoneyAmountRaw] = useState<string>('2000');
@@ -69,9 +78,8 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
 
   // Live queries desde IndexedDB
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
-  const products = useLiveQuery(() =>
-    db.products.filter((p) => p.isActive !== false).toArray()
-  ) || [];
+  const products =
+    useLiveQuery(() => db.products.filter((p) => p.isActive !== false).toArray()) || [];
   const openSession = useLiveQuery(() => db.cashSessions.filter((s) => s.status === 'open').first());
   const hasOpenSession = Boolean(openSession);
 
@@ -198,7 +206,7 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
     }
 
     try {
-      const receivedVal = paymentMethod === 'cash' ? (numReceived || cartTotal) : cartTotal;
+      const receivedVal = paymentMethod === 'cash' ? numReceived || cartTotal : cartTotal;
       await salesRepository.processSale({
         cartItems: cart,
         paymentMethod,
@@ -228,10 +236,9 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
       ? (parseCOPInput(moneyAmountRaw) / selectedBulkProduct.salePrice).toFixed(3)
       : '0.000';
 
-  const computedFractionalMoney =
-    selectedBulkProduct
-      ? Math.round((parseFloat(quantityAmountRaw) || 0) * selectedBulkProduct.salePrice)
-      : 0;
+  const computedFractionalMoney = selectedBulkProduct
+    ? Math.round((parseFloat(quantityAmountRaw) || 0) * selectedBulkProduct.salePrice)
+    : 0;
 
   return (
     <div
@@ -268,14 +275,21 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
           <CheckCircle2 size={32} color="#f6d9fb" />
           <div>
             <div style={{ fontWeight: 700, fontSize: '18px', color: '#f6d9fb' }}>
-              ¡Venta Registrada Exitosamente!
+              {successToast.title || '¡Venta Registrada Exitosamente!'}
             </div>
             <div style={{ fontSize: '14px', color: '#ded8e3', marginTop: '4px' }}>
-              Total: <strong>{formatCOP(successToast.total)}</strong>
-              {successToast.change > 0 && (
-                <span>
-                  {' '}• Cambio / Vueltas: <strong>{formatCOP(successToast.change)}</strong>
-                </span>
+              {successToast.subtitle ? (
+                <span>{successToast.subtitle}</span>
+              ) : (
+                <>
+                  Total: <strong>{formatCOP(successToast.total)}</strong>
+                  {successToast.change > 0 && (
+                    <span>
+                      {' '}
+                      • Cambio / Vueltas: <strong>{formatCOP(successToast.change)}</strong>
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -433,7 +447,9 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
           >
             <Package size={48} color="#7e747f" style={{ marginBottom: '16px', opacity: 0.5 }} />
             <div style={{ fontSize: '18px', fontWeight: 600 }}>No se encontraron productos</div>
-            <div style={{ fontSize: '14px', marginTop: '4px' }}>Intenta con otro término de búsqueda o categoría.</div>
+            <div style={{ fontSize: '14px', marginTop: '4px' }}>
+              Intenta con otro término de búsqueda o categoría.
+            </div>
           </div>
         ) : (
           <div
@@ -501,11 +517,7 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                         boxShadow: '0 4px 12px rgba(49, 3, 68, 0.06)'
                       }}
                     >
-                      {product.type === 'service' ? (
-                        <Smartphone size={22} />
-                      ) : (
-                        <Sparkles size={22} />
-                      )}
+                      {product.type === 'service' ? <Smartphone size={22} /> : <Sparkles size={22} />}
                     </div>
 
                     {isBulk && (
@@ -555,7 +567,9 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                         fontFamily: 'var(--font-sans)'
                       }}
                     >
-                      {product.type === 'service' ? 'Servicio / Recarga' : `${product.currentStock} ${product.unit}s`}
+                      {product.type === 'service'
+                        ? 'Servicio / Recarga'
+                        : `${product.currentStock} ${product.unit}s`}
                     </div>
                   </div>
 
@@ -758,7 +772,9 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
             >
               <Receipt size={36} color="#cfc3cf" style={{ marginBottom: '8px' }} />
               <div>El carrito está vacío</div>
-              <div style={{ fontSize: '12px', marginTop: '2px' }}>Haz clic en un producto para agregarlo</div>
+              <div style={{ fontSize: '12px', marginTop: '2px' }}>
+                Haz clic en un producto para agregarlo
+              </div>
             </div>
           ) : (
             cart.map((item) => (
@@ -1061,7 +1077,8 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                 flex: 1,
                 padding: '12px 16px',
                 borderRadius: '9999px',
-                border: paymentMethod === 'cash' ? '1px solid #310344' : '1px solid rgba(207, 195, 207, 0.4)',
+                border:
+                  paymentMethod === 'cash' ? '1px solid #310344' : '1px solid rgba(207, 195, 207, 0.4)',
                 backgroundColor: paymentMethod === 'cash' ? '#310344' : '#ffffff',
                 color: paymentMethod === 'cash' ? '#ffffff' : '#4d444e',
                 fontSize: '13px',
@@ -1084,7 +1101,10 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                 flex: 1,
                 padding: '12px 16px',
                 borderRadius: '9999px',
-                border: paymentMethod === 'transfer' ? '1px solid #310344' : '1px solid rgba(207, 195, 207, 0.4)',
+                border:
+                  paymentMethod === 'transfer'
+                    ? '1px solid #310344'
+                    : '1px solid rgba(207, 195, 207, 0.4)',
                 backgroundColor: paymentMethod === 'transfer' ? '#310344' : '#ffffff',
                 color: paymentMethod === 'transfer' ? '#ffffff' : '#4d444e',
                 fontSize: '13px',
@@ -1102,36 +1122,64 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
             </button>
           </div>
 
-          {/* Botón Principal: Confirmar Venta */}
-          <button
-            onClick={handleConfirmSale}
-            disabled={cart.length === 0 || !hasOpenSession}
-            style={{
-              backgroundColor: cart.length > 0 && hasOpenSession ? '#010001' : '#e6e0eb',
-              color: cart.length > 0 && hasOpenSession ? '#ffffff' : '#7e747f',
-              border: 'none',
-              borderRadius: '48px',
-              padding: '18px 24px',
-              fontSize: '18px',
-              fontWeight: 700,
-              cursor: cart.length > 0 && hasOpenSession ? 'pointer' : 'not-allowed',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '10px',
-              boxShadow: cart.length > 0 && hasOpenSession ? '0 12px 32px rgba(49, 3, 68, 0.25)' : 'none',
-              transition: 'transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease'
-            }}
-            onMouseDown={(e) => {
-              if (cart.length > 0 && hasOpenSession) e.currentTarget.style.transform = 'scale(0.98)';
-            }}
-            onMouseUp={(e) => {
-              if (cart.length > 0 && hasOpenSession) e.currentTarget.style.transform = 'scale(1)';
-            }}
-          >
-            <span>{hasOpenSession ? 'Confirmar Venta' : 'Abre caja para vender'}</span>
-            <CheckCircle2 size={20} />
-          </button>
+          {/* Botones Principales: Confirmar Venta Inmediata o Fiar / A Crédito */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <button
+              onClick={handleConfirmSale}
+              disabled={cart.length === 0 || !hasOpenSession}
+              style={{
+                backgroundColor: cart.length > 0 && hasOpenSession ? '#010001' : '#e6e0eb',
+                color: cart.length > 0 && hasOpenSession ? '#ffffff' : '#7e747f',
+                border: 'none',
+                borderRadius: '48px',
+                padding: '18px 24px',
+                fontSize: '18px',
+                fontWeight: 700,
+                cursor: cart.length > 0 && hasOpenSession ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                boxShadow:
+                  cart.length > 0 && hasOpenSession ? '0 12px 32px rgba(49, 3, 68, 0.25)' : 'none',
+                transition: 'transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease'
+              }}
+              onMouseDown={(e) => {
+                if (cart.length > 0 && hasOpenSession) e.currentTarget.style.transform = 'scale(0.98)';
+              }}
+              onMouseUp={(e) => {
+                if (cart.length > 0 && hasOpenSession) e.currentTarget.style.transform = 'scale(1)';
+              }}
+            >
+              <span>{hasOpenSession ? 'Confirmar Venta' : 'Abre caja para vender'}</span>
+              <CheckCircle2 size={20} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setNewDebtModalOpen(true)}
+              disabled={cart.length === 0}
+              style={{
+                backgroundColor: cart.length > 0 ? '#f8f1fd' : '#f2ecf7',
+                color: cart.length > 0 ? '#310344' : '#9c8f9e',
+                border: cart.length > 0 ? '1.5px solid #310344' : '1px solid #e6e0eb',
+                borderRadius: '48px',
+                padding: '12px 20px',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: cart.length > 0 ? 'pointer' : 'not-allowed',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'all 0.15s ease'
+              }}
+              title="Descontar stock hoy y registrar como préstamo / fiado para cobrar después"
+            >
+              <HandCoins size={17} />
+              <span>Fiar / A Crédito (Descuenta Stock Hoy)</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -1266,7 +1314,10 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                       style={{
                         padding: '6px 14px',
                         borderRadius: '9999px',
-                        border: parseCOPInput(moneyAmountRaw) === val ? '1px solid #310344' : '1px solid #cfc3cf',
+                        border:
+                          parseCOPInput(moneyAmountRaw) === val
+                            ? '1px solid #310344'
+                            : '1px solid #cfc3cf',
                         backgroundColor: parseCOPInput(moneyAmountRaw) === val ? '#f6d9fb' : '#ffffff',
                         color: parseCOPInput(moneyAmountRaw) === val ? '#27142d' : '#1d1a22',
                         fontSize: '13px',
@@ -1292,13 +1343,17 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#7e747f' }}>CANTIDAD A DESPACHAR:</div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#7e747f' }}>
+                      CANTIDAD A DESPACHAR:
+                    </div>
                     <div style={{ fontSize: '20px', fontWeight: 700, color: '#310344' }}>
                       {computedFractionalQty} {selectedBulkProduct.unit}s
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#7e747f' }}>TOTAL A COBRAR:</div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#7e747f' }}>
+                      TOTAL A COBRAR:
+                    </div>
                     <div style={{ fontSize: '20px', fontWeight: 700, color: '#010001' }}>
                       {formatCOP(parseCOPInput(moneyAmountRaw))}
                     </div>
@@ -1363,7 +1418,8 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                       style={{
                         padding: '6px 14px',
                         borderRadius: '9999px',
-                        border: quantityAmountRaw === chip.val ? '1px solid #310344' : '1px solid #cfc3cf',
+                        border:
+                          quantityAmountRaw === chip.val ? '1px solid #310344' : '1px solid #cfc3cf',
                         backgroundColor: quantityAmountRaw === chip.val ? '#f6d9fb' : '#ffffff',
                         color: quantityAmountRaw === chip.val ? '#27142d' : '#1d1a22',
                         fontSize: '13px',
@@ -1395,7 +1451,9 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#7e747f' }}>TOTAL A COBRAR:</div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#7e747f' }}>
+                      TOTAL A COBRAR:
+                    </div>
                     <div style={{ fontSize: '20px', fontWeight: 700, color: '#010001' }}>
                       {formatCOP(computedFractionalMoney)}
                     </div>
@@ -1452,6 +1510,29 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
           </div>
         )}
       </Modal>
+
+      {/* Modal para Registrar Fiado directamente desde el Carrito POS */}
+      <NewDebtModal
+        isOpen={newDebtModalOpen}
+        onClose={() => setNewDebtModalOpen(false)}
+        initialCartItems={cart}
+        onRequireOpenSession={() => setSessionModalOpen(true)}
+        onSuccess={(createdDebt) => {
+          clearCart();
+          setSuccessToast({
+            title: `¡Fiado ${createdDebt.folio} Registrado!`,
+            total: createdDebt.totalAmount,
+            change: 0,
+            subtitle: `Cliente: ${createdDebt.debtorName} • Valor: ${formatCOP(
+              createdDebt.totalAmount
+            )} (Stock descontado, pendiente de cobro)`
+          });
+          setTimeout(() => {
+            setSuccessToast(null);
+          }, 4500);
+        }}
+      />
+
       <CashSessionModal
         isOpen={sessionModalOpen}
         onClose={() => setSessionModalOpen(false)}

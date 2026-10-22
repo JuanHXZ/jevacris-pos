@@ -3,6 +3,9 @@ import type {
   CashRegisterSummary,
   DailyBreakdownRow,
   DailySummary,
+  DebtItem,
+  DebtPayment,
+  DebtWithDetails,
   EnrichedPeriodSale,
   ExternalEarning,
   PeriodReportData,
@@ -14,6 +17,7 @@ import type {
 import { PRINCIPAL_CASH_REGISTER_ID } from '../types';
 import { cashRegisterRepository } from './cashRegisterRepository';
 import { cashSessionRepository } from './cashSessionRepository';
+import { computeDaysUntilDue } from './debtsRepository';
 import { ensurePrincipalCashRegister } from '../db/cashBootstrap';
 import {
   enumerateDateStringsBetween,
@@ -36,7 +40,14 @@ export const reportsRepository = {
     // Formato YYYY-MM-DD
     const targetDate = dateString || getLocalDateString();
 
-    const allSales = await db.sales.toArray();
+    const [allSales, allSaleItems, allExternal, allDebts, allDebtPayments] = await Promise.all([
+      db.sales.toArray(),
+      db.saleItems.toArray(),
+      db.externalEarnings.toArray(),
+      db.debts.toArray(),
+      db.debtPayments.toArray()
+    ]);
+
     const todaySales = allSales.filter((s) => toLocalDateString(s.saleDate) === targetDate);
 
     let cashSales = 0;
@@ -54,7 +65,6 @@ export const reportsRepository = {
 
     // Calcular ganancia solo de productos físicos
     const todaySaleIds = new Set(todaySales.map((s) => s.id));
-    const allSaleItems = await db.saleItems.toArray();
     const todayPhysicalItems = allSaleItems.filter(
       (item) => todaySaleIds.has(item.saleId) && item.productType === 'physical'
     );
@@ -62,9 +72,21 @@ export const reportsRepository = {
     const physicalProfit = todayPhysicalItems.reduce((sum, item) => sum + item.profit, 0);
 
     // Ganancias de plataformas externas
-    const allExternal = await db.externalEarnings.toArray();
     const todayExternal = allExternal.filter((e) => e.earningDate === targetDate);
     const externalEarnings = todayExternal.reduce((sum, e) => sum + e.amount, 0);
+
+    // Control de Fiados entregados en el día vs. Abonos recaudados en el día
+    const todayDebts = allDebts.filter((d) => toLocalDateString(d.createdAt) === targetDate);
+    const debtsGivenAmount = todayDebts.reduce((sum, d) => sum + d.totalAmount, 0);
+    const debtsGivenCount = todayDebts.length;
+    const debtsPendingFromDay = todayDebts.reduce((sum, d) => sum + d.remainingAmount, 0);
+
+    const todayDebtPayments = allDebtPayments.filter((p) => toLocalDateString(p.paidAt) === targetDate);
+    const debtPaymentsCollected = todayDebtPayments.reduce((sum, p) => sum + p.amount, 0);
+
+    const totalActiveReceivables = allDebts
+      .filter((d) => d.status !== 'paid')
+      .reduce((sum, d) => sum + d.remainingAmount, 0);
 
     return {
       totalTransactions: todaySales.length,
@@ -73,7 +95,12 @@ export const reportsRepository = {
       transferSales,
       physicalProfit,
       externalEarnings,
-      totalProfit: physicalProfit + externalEarnings
+      totalProfit: physicalProfit + externalEarnings,
+      debtsGivenAmount,
+      debtsGivenCount,
+      debtsPendingFromDay,
+      debtPaymentsCollected,
+      totalActiveReceivables
     };
   },
 
@@ -226,13 +253,26 @@ export const reportsRepository = {
       products: db.products
     });
 
-    const [allSales, allSaleItems, allExternal, allSessions, allExpenses, registers] = await Promise.all([
+    const [
+      allSales,
+      allSaleItems,
+      allExternal,
+      allSessions,
+      allExpenses,
+      registers,
+      allDebts,
+      allDebtItems,
+      allDebtPayments
+    ] = await Promise.all([
       db.sales.toArray(),
       db.saleItems.toArray(),
       db.externalEarnings.toArray(),
       db.cashSessions.toArray(),
       db.expenses.toArray(),
-      cashRegisterRepository.getAll(true)
+      cashRegisterRepository.getAll(true),
+      db.debts.toArray(),
+      db.debtItems.toArray(),
+      db.debtPayments.toArray()
     ]);
 
     const registerNamesById: Record<string, string> = {};
@@ -279,6 +319,63 @@ export const reportsRepository = {
       .filter((ex) => isIsoWithinRange(ex.expenseDate, range.startIso, range.endIso))
       .sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime());
 
+    // 3b. Filtrar fiados entregados y abonos en el período
+    const debtItemsByDebtId = new Map<string, DebtItem[]>();
+    for (const ditem of allDebtItems) {
+      if (!debtItemsByDebtId.has(ditem.debtId)) {
+        debtItemsByDebtId.set(ditem.debtId, []);
+      }
+      debtItemsByDebtId.get(ditem.debtId)!.push(ditem);
+    }
+
+    const debtPaymentsByDebtId = new Map<string, DebtPayment[]>();
+    for (const dpay of allDebtPayments) {
+      if (!debtPaymentsByDebtId.has(dpay.debtId)) {
+        debtPaymentsByDebtId.set(dpay.debtId, []);
+      }
+      debtPaymentsByDebtId.get(dpay.debtId)!.push(dpay);
+    }
+
+    const todayStr = getLocalDateString();
+    const enrichedAllDebts: DebtWithDetails[] = allDebts.map((debt) => {
+      const daysUntilDue = debt.status === 'paid' ? null : computeDaysUntilDue(debt.dueDate, todayStr);
+      const isOverdue = debt.status !== 'paid' && daysUntilDue !== null && daysUntilDue < 0;
+      return {
+        ...debt,
+        items: debtItemsByDebtId.get(debt.id) || [],
+        payments: debtPaymentsByDebtId.get(debt.id) || [],
+        daysUntilDue,
+        isOverdue
+      };
+    });
+
+    const debtsInPeriod = enrichedAllDebts
+      .filter((d) => isIsoWithinRange(d.createdAt, range.startIso, range.endIso))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const activeDebts = enrichedAllDebts
+      .filter((d) => d.status !== 'paid')
+      .sort((a, b) => b.remainingAmount - a.remainingAmount);
+
+    const debtByIdMap = new Map(allDebts.map((d) => [d.id, d]));
+    const debtPaymentsInPeriod = allDebtPayments
+      .filter((p) => isIsoWithinRange(p.paidAt, range.startIso, range.endIso))
+      .map((p) => {
+        const parentDebt = debtByIdMap.get(p.debtId);
+        return {
+          ...p,
+          debtorName: parentDebt?.debtorName || 'Cliente',
+          folio: parentDebt?.folio || '#CR'
+        };
+      })
+      .sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime());
+
+    const debtsGivenAmount = debtsInPeriod.reduce((sum, d) => sum + d.totalAmount, 0);
+    const debtsGivenCount = debtsInPeriod.length;
+    const debtsPendingFromPeriod = debtsInPeriod.reduce((sum, d) => sum + d.remainingAmount, 0);
+    const debtPaymentsCollected = debtPaymentsInPeriod.reduce((sum, p) => sum + p.amount, 0);
+    const totalActiveReceivables = activeDebts.reduce((sum, d) => sum + d.remainingAmount, 0);
+
     // 4. Calcular métricas acumuladas (Summary)
     let cashSales = 0;
     let transferSales = 0;
@@ -317,6 +414,18 @@ export const reportsRepository = {
       externalByDate.set(ext.earningDate, (externalByDate.get(ext.earningDate) || 0) + ext.amount);
     }
 
+    const debtsGivenByDate = new Map<string, number>();
+    for (const debt of debtsInPeriod) {
+      const dStr = toLocalDateString(debt.createdAt);
+      debtsGivenByDate.set(dStr, (debtsGivenByDate.get(dStr) || 0) + debt.totalAmount);
+    }
+
+    const debtPaymentsByDate = new Map<string, number>();
+    for (const pay of debtPaymentsInPeriod) {
+      const dStr = toLocalDateString(pay.paidAt);
+      debtPaymentsByDate.set(dStr, (debtPaymentsByDate.get(dStr) || 0) + pay.amount);
+    }
+
     const dailyBreakdown: DailyBreakdownRow[] = allDatesInSpan
       .map((dateStr) => {
         const dSales = salesByDate.get(dateStr) || [];
@@ -339,6 +448,9 @@ export const reportsRepository = {
         }
 
         const dExt = externalByDate.get(dateStr) || 0;
+        const dDebtsGiven = debtsGivenByDate.get(dateStr) || 0;
+        const dDebtPayments = debtPaymentsByDate.get(dateStr) || 0;
+
         return {
           dateStr,
           totalTransactions: dSales.length,
@@ -347,10 +459,18 @@ export const reportsRepository = {
           totalSales: dTotal,
           physicalProfit: dPhysProfit,
           externalEarnings: dExt,
-          totalProfit: dPhysProfit + dExt
+          totalProfit: dPhysProfit + dExt,
+          debtsGivenAmount: dDebtsGiven,
+          debtPaymentsCollected: dDebtPayments
         };
       })
-      .filter((row) => allDatesInSpan.length <= 7 || row.totalTransactions > 0 || row.externalEarnings > 0);
+      .filter(
+        (row) =>
+          allDatesInSpan.length <= 7 ||
+          row.totalTransactions > 0 ||
+          row.externalEarnings > 0 ||
+          (row.debtsGivenAmount ?? 0) > 0
+      );
 
     // 6. Construir ranking de productos vendidos (topProducts)
     const productStatsMap = new Map<string, TopProductRow>();
@@ -414,7 +534,13 @@ export const reportsRepository = {
         externalEarnings: externalEarningsTotal,
         totalProfit,
         expensesTotal,
-        netBalance
+        netBalance,
+        debtsGivenAmount,
+        debtsGivenCount,
+        debtsPendingFromDay: debtsPendingFromPeriod,
+        debtsPendingFromPeriod,
+        debtPaymentsCollected,
+        totalActiveReceivables
       },
       dailyBreakdown,
       salesWithItems,
@@ -422,7 +548,10 @@ export const reportsRepository = {
       externalEarningsList,
       cashSessions,
       expenses,
-      cashRegisterSummaries
+      cashRegisterSummaries,
+      debtsInPeriod,
+      activeDebts,
+      debtPaymentsInPeriod
     };
   },
 
@@ -437,7 +566,10 @@ export const reportsRepository = {
       cashRegisters,
       cashRegisterDistributionLines,
       cashSessions,
-      expenses
+      expenses,
+      debts,
+      debtItems,
+      debtPayments
     ] = await Promise.all([
       db.categories.toArray(),
       db.products.toArray(),
@@ -448,11 +580,14 @@ export const reportsRepository = {
       db.cashRegisters.toArray(),
       db.cashRegisterDistributionLines.toArray(),
       db.cashSessions.toArray(),
-      db.expenses.toArray()
+      db.expenses.toArray(),
+      db.debts.toArray(),
+      db.debtItems.toArray(),
+      db.debtPayments.toArray()
     ]);
 
     return {
-      version: 2,
+      version: 3,
       appName: 'JEVACRIS POS & INVENTORY',
       exportedAt: new Date().toISOString(),
       data: {
@@ -465,9 +600,11 @@ export const reportsRepository = {
         cashRegisters,
         cashRegisterDistributionLines,
         cashSessions,
-        expenses
+        expenses,
+        debts,
+        debtItems,
+        debtPayments
       }
     };
   }
 };
-

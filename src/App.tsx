@@ -6,6 +6,7 @@ import { InventoryView } from './features/inventory/InventoryView';
 import { StockView } from './features/stock/StockView';
 import { ReportsView } from './features/reports/ReportsView';
 import { CashView } from './features/cash/CashView';
+import { DebtsView } from './features/debts/DebtsView';
 import { db, seedInitialDataIfNeeded } from './db';
 import { syncEngine } from './sync/syncEngine';
 import { usePinLock } from './hooks/usePinLock';
@@ -107,9 +108,15 @@ export function App() {
         hasOpenCashSession={Boolean(openCashSession)}
         onCloseCashSession={() => setActiveTab('cash-shifts')}
       >
-        {activeTab === 'pos' && <PosView onGoToCashShifts={() => setActiveTab('cash-shifts')} />}
+        {activeTab === 'pos' && (
+          <PosView
+            onGoToCashShifts={() => setActiveTab('cash-shifts')}
+            onGoToDebts={() => setActiveTab('debts')}
+          />
+        )}
         {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'stock' && <StockView />}
+        {activeTab === 'debts' && <DebtsView onGoToCashShifts={() => setActiveTab('cash-shifts')} />}
         {activeTab === 'cash-shifts' && (
           openCashSession ? (
             <CashClosingView
@@ -125,7 +132,12 @@ export function App() {
           )
         )}
         {activeTab === 'cash' && <CashView />}
-        {activeTab === 'reports' && <ReportsView onGoToCash={() => setActiveTab('cash')} />}
+        {activeTab === 'reports' && (
+          <ReportsView
+            onGoToCash={() => setActiveTab('cash')}
+            onGoToDebts={() => setActiveTab('debts')}
+          />
+        )}
       </AppShell>
 
       {/* Modal de Configuración y Seguridad de PIN */}

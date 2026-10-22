@@ -7,7 +7,8 @@ import {
   Plus,
   Wallet,
   Settings,
-  ReceiptText
+  ReceiptText,
+  HandCoins
 } from 'lucide-react';
 import { TabId } from './AppShell';
 
@@ -39,6 +40,11 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
       id: 'stock' as TabId,
       label: 'Entradas de Stock',
       icon: ArrowDownToLine
+    },
+    {
+      id: 'debts' as TabId,
+      label: 'Préstamos y Fiados',
+      icon: HandCoins
     },
     {
       id: 'cash-shifts' as TabId,
@@ -79,7 +85,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
       }}
     >
       {/* Brand Header */}
-      <div style={{ marginBottom: '32px' }}>
+      <div style={{ marginBottom: '28px' }}>
         <h1
           style={{
             margin: 0,
@@ -112,7 +118,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px',
+          gap: '8px',
           flex: 1
         }}
       >
@@ -157,7 +163,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
               />
               <span
                 style={{
-                  fontSize: '17px',
+                  fontSize: '16.5px',
                   fontWeight: isActive ? 600 : 500,
                   letterSpacing: '-0.2px',
                   fontFamily: 'var(--font-sans)'
@@ -175,9 +181,9 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: '16px',
+          gap: '14px',
           marginTop: 'auto',
-          paddingTop: '24px'
+          paddingTop: '20px'
         }}
       >
         {/* Nueva Venta CTA Button */}
@@ -233,7 +239,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
           <Settings size={20} strokeWidth={2} color="#4d444e" />
           <span
             style={{
-              fontSize: '17px',
+              fontSize: '16.5px',
               fontWeight: 500,
               fontFamily: 'var(--font-sans)'
             }}

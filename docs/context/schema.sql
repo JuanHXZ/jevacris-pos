@@ -169,3 +169,74 @@ CREATE INDEX IF NOT EXISTS idx_sale_items_cash_register ON sale_items(cash_regis
 CREATE INDEX IF NOT EXISTS idx_dist_lines_register ON cash_register_distribution_lines(cash_register_id);
 CREATE INDEX IF NOT EXISTS idx_expenses_session ON expenses(cash_session_id);
 CREATE INDEX IF NOT EXISTS idx_cash_sessions_status ON cash_sessions(status);
+
+
+-- =========================================================================
+-- Módulo de Préstamos / Fiados y Cuentas por Cobrar (RF18)
+-- =========================================================================
+CREATE TABLE IF NOT EXISTS debts (
+    id TEXT PRIMARY KEY,
+    folio TEXT NOT NULL,
+    debtor_name TEXT NOT NULL,
+    debtor_phone TEXT,
+    total_amount REAL NOT NULL DEFAULT 0,
+    total_profit REAL NOT NULL DEFAULT 0,
+    paid_amount REAL NOT NULL DEFAULT 0,
+    remaining_amount REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'partial', 'paid')),
+    due_date DATE,
+    notes TEXT,
+    cash_session_id TEXT,
+    paid_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (cash_session_id) REFERENCES cash_sessions(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS debt_items (
+    id TEXT PRIMARY KEY,
+    debt_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    product_name TEXT NOT NULL,
+    product_type TEXT NOT NULL DEFAULT 'physical' CHECK(product_type IN ('physical', 'service')),
+    unit TEXT NOT NULL DEFAULT 'unidad',
+    quantity REAL NOT NULL DEFAULT 1,
+    unit_price REAL NOT NULL DEFAULT 0,
+    unit_cost REAL NOT NULL DEFAULT 0,
+    subtotal REAL NOT NULL DEFAULT 0,
+    profit REAL NOT NULL DEFAULT 0,
+    cash_register_id TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
+    FOREIGN KEY (cash_register_id) REFERENCES cash_registers(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS debt_payments (
+    id TEXT PRIMARY KEY,
+    debt_id TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    payment_method TEXT NOT NULL CHECK(payment_method IN ('cash', 'transfer')),
+    paid_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    cash_session_id TEXT,
+    generated_sale_id TEXT,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (debt_id) REFERENCES debts(id) ON DELETE CASCADE,
+    FOREIGN KEY (cash_session_id) REFERENCES cash_sessions(id) ON DELETE SET NULL,
+    FOREIGN KEY (generated_sale_id) REFERENCES sales(id) ON DELETE SET NULL
+);
+
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS debt_id TEXT;
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS debt_payment_id TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_debts_status ON debts(status);
+CREATE INDEX IF NOT EXISTS idx_debts_debtor_name ON debts(debtor_name);
+CREATE INDEX IF NOT EXISTS idx_debts_created_at ON debts(created_at);
+CREATE INDEX IF NOT EXISTS idx_debts_due_date ON debts(due_date);
+CREATE INDEX IF NOT EXISTS idx_debt_items_debt ON debt_items(debt_id);
+CREATE INDEX IF NOT EXISTS idx_debt_items_product ON debt_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_debt_payments_debt ON debt_payments(debt_id);
+CREATE INDEX IF NOT EXISTS idx_debt_payments_paid_at ON debt_payments(paid_at);
+CREATE INDEX IF NOT EXISTS idx_sales_debt ON sales(debt_id);

@@ -9,7 +9,8 @@ import {
   AlertTriangle,
   Sparkles,
   Package,
-  Plus
+  Plus,
+  HandCoins
 } from 'lucide-react';
 import { db } from '../../db';
 import { reportsRepository, type WeeklyDayData } from '../../repositories/reportsRepository';
@@ -20,10 +21,10 @@ import { formatCOP, formatNumberWithDots, parseCOPInput } from '../../utils/curr
 import { getLocalDateString } from '../../utils/date';
 import type { DailySummary } from '../../types';
 
-export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
-  const [selectedDate, setSelectedDate] = useState<string>(
-    getLocalDateString()
-  );
+export const ReportsView: React.FC<{ onGoToCash?: () => void; onGoToDebts?: () => void }> = ({
+  onGoToDebts
+}) => {
+  const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
   const [summary, setSummary] = useState<DailySummary>({
     totalTransactions: 0,
     totalSales: 0,
@@ -31,7 +32,12 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
     transferSales: 0,
     physicalProfit: 0,
     externalEarnings: 0,
-    totalProfit: 0
+    totalProfit: 0,
+    debtsGivenAmount: 0,
+    debtsGivenCount: 0,
+    debtsPendingFromDay: 0,
+    debtPaymentsCollected: 0,
+    totalActiveReceivables: 0
   });
   const [yesterdaySales, setYesterdaySales] = useState<number>(0);
   const [weeklyData, setWeeklyData] = useState<WeeklyDayData[]>([]);
@@ -39,7 +45,6 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isTransactionsModalOpen, setIsTransactionsModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-
 
   // Formulario de Ganancia Externa
   const [platformName, setPlatformName] = useState('Recargas Móviles');
@@ -50,11 +55,14 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
   const salesCount = useLiveQuery(() => db.sales.count());
   const earningsCount = useLiveQuery(() => db.externalEarnings.count());
   const sessionCount = useLiveQuery(() => db.cashSessions.count());
-  const lowStockProducts = useLiveQuery(() =>
-    db.products
-      .filter((p) => p.isActive !== false && p.type === 'physical' && p.currentStock <= p.minStockAlert)
-      .toArray()
-  ) || [];
+  const debtsCount = useLiveQuery(() => db.debts.count());
+  const debtPaymentsCount = useLiveQuery(() => db.debtPayments.count());
+  const lowStockProducts =
+    useLiveQuery(() =>
+      db.products
+        .filter((p) => p.isActive !== false && p.type === 'physical' && p.currentStock <= p.minStockAlert)
+        .toArray()
+    ) || [];
 
   const categories = useLiveQuery(() => db.categories.toArray()) || [];
 
@@ -71,7 +79,7 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
     };
 
     loadReportData();
-  }, [selectedDate, salesCount, earningsCount, sessionCount]);
+  }, [selectedDate, salesCount, earningsCount, sessionCount, debtsCount, debtPaymentsCount]);
 
   // Formato de fecha editorial: "Jueves, 24 de Octubre de 2023"
   const formatEditorialDate = (dateStr: string) => {
@@ -202,9 +210,7 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#f8f1fd')}
           >
             <Calendar size={14} color="#7a4c8c" />
-            <span>
-              {selectedDate === getLocalDateString() ? 'HOY' : selectedDate}
-            </span>
+            <span>{selectedDate === getLocalDateString() ? 'HOY' : selectedDate}</span>
           </button>
 
           {/* Botón Ganancia Externa */}
@@ -255,7 +261,6 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
           </button>
         </div>
       </div>
-
 
       {/* ========================================================================= */}
       {/* Bento Grid 60% / 40% (Figma 1:723)                                        */}
@@ -314,7 +319,9 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
               />
 
               {/* Título de la Métrica */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative', zIndex: 1 }}>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'relative', zIndex: 1 }}
+              >
                 <DollarSign size={16} color="#7a4c8c" />
                 <span
                   style={{
@@ -493,6 +500,196 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
                 >
                   {summary.totalTransactions}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ===================================================================== */}
+          {/* Control de Fiados / Préstamos del Día (Salida de Stock vs. Recaudo)    */}
+          {/* ===================================================================== */}
+          <div
+            style={{
+              backgroundColor: '#fdf7ff',
+              borderRadius: '32px',
+              padding: '24px 28px',
+              boxShadow: '16px 0px 24px rgba(49, 3, 68, 0.05)',
+              border: '1px solid rgba(207, 195, 207, 0.35)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '14px',
+                    backgroundColor: '#f6d9fb',
+                    color: '#310344',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <HandCoins size={18} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1d1a22' }}>
+                    Control de Préstamos y Fiados
+                  </h3>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#4d444e' }}>
+                    Mercancía entregada a crédito hoy (descontada de stock, pendiente de venta) vs. abonos recaudados
+                  </p>
+                </div>
+              </div>
+
+              {onGoToDebts && (
+                <button
+                  type="button"
+                  onClick={onGoToDebts}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#f8f1fd',
+                    border: '1px solid rgba(207, 195, 207, 0.5)',
+                    color: '#310344',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Ir a Préstamos y Fiados ↗
+                </button>
+              )}
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+                gap: '14px'
+              }}
+            >
+              {/* Salida en Fiado Hoy */}
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '20px',
+                  padding: '14px 16px',
+                  border: '1px solid #f2ecf7'
+                }}
+              >
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: '#995c00',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em'
+                  }}
+                >
+                  Mercancía Fiada (Salida Hoy)
+                </span>
+                <div
+                  style={{
+                    fontSize: '21px',
+                    fontWeight: 800,
+                    color: '#1d1a22',
+                    marginTop: '4px',
+                    fontVariantNumeric: 'tabular-nums'
+                  }}
+                >
+                  {formatCOP(summary.debtsGivenAmount || 0)}
+                </div>
+                <span style={{ fontSize: '11px', color: '#4d444e' }}>
+                  {summary.debtsGivenCount || 0} {(summary.debtsGivenCount || 0) === 1 ? 'fiado' : 'fiados'} •
+                  Pendiente: {formatCOP(summary.debtsPendingFromDay || 0)}
+                </span>
+              </div>
+
+              {/* Abonos Recaudados Hoy */}
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '20px',
+                  padding: '14px 16px',
+                  border: '1px solid #f2ecf7'
+                }}
+              >
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: '#1e7e34',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em'
+                  }}
+                >
+                  Abonos Recaudados Hoy
+                </span>
+                <div
+                  style={{
+                    fontSize: '21px',
+                    fontWeight: 800,
+                    color: '#1e7e34',
+                    marginTop: '4px',
+                    fontVariantNumeric: 'tabular-nums'
+                  }}
+                >
+                  {formatCOP(summary.debtPaymentsCollected || 0)}
+                </div>
+                <span style={{ fontSize: '11px', color: '#4d444e' }}>
+                  Ya incluidos en Ventas Totales del día
+                </span>
+              </div>
+
+              {/* Cartera Activa Global */}
+              <div
+                style={{
+                  backgroundColor: '#ffffff',
+                  borderRadius: '20px',
+                  padding: '14px 16px',
+                  border: '1px solid #f2ecf7'
+                }}
+              >
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: '#310344',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em'
+                  }}
+                >
+                  Cartera Total por Cobrar
+                </span>
+                <div
+                  style={{
+                    fontSize: '21px',
+                    fontWeight: 800,
+                    color: '#310344',
+                    marginTop: '4px',
+                    fontVariantNumeric: 'tabular-nums'
+                  }}
+                >
+                  {formatCOP(summary.totalActiveReceivables || 0)}
+                </div>
+                <span style={{ fontSize: '11px', color: '#4d444e' }}>
+                  Saldo acumulado pendiente de clientes
+                </span>
               </div>
             </div>
           </div>
@@ -745,7 +942,9 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
             ) : (
               lowStockProducts.map((prod, idx) => {
                 const isCritical = prod.currentStock <= Math.max(1, Math.floor(prod.minStockAlert / 2));
-                const catName = prod.categoryId ? categoryMap.get(prod.categoryId) || 'General' : 'General';
+                const catName = prod.categoryId
+                  ? categoryMap.get(prod.categoryId) || 'General'
+                  : 'General';
 
                 return (
                   <React.Fragment key={prod.id}>
@@ -762,7 +961,9 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
                       }}
                     >
                       {/* Ícono de Producto y Nombre */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 0 }}
+                      >
                         <div
                           style={{
                             width: '40px',
@@ -854,13 +1055,13 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
               {mostCriticalProduct ? (
                 <>
                   Se recomienda generar una orden de reposición para{' '}
-                  <strong style={{ color: '#310344' }}>{mostCriticalProduct.name}</strong> antes del próximo ciclo de
-                  ventas debido a su nivel crítico en inventario.
+                  <strong style={{ color: '#310344' }}>{mostCriticalProduct.name}</strong> antes del próximo
+                  ciclo de ventas debido a su nivel crítico en inventario.
                 </>
               ) : (
                 <>
-                  El flujo de stock actual cubre la demanda proyectada. Recuerda realizar cuadraturas de caja al cierre de
-                  la jornada.
+                  El flujo de stock actual cubre la demanda proyectada. Recuerda realizar cuadraturas de caja al
+                  cierre de la jornada.
                 </>
               )}
             </div>
@@ -1127,7 +1328,6 @@ export const ReportsView: React.FC<{ onGoToCash?: () => void }> = () => {
         onClose={() => setIsExportModalOpen(false)}
         initialDate={selectedDate}
       />
-
 
       <style>{`
         @media (max-width: 960px) {

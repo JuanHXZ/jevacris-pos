@@ -14,14 +14,15 @@ import {
   Terminal,
   CloudOff,
   CircleDollarSign,
-  ReceiptText
+  ReceiptText,
+  HandCoins
 } from 'lucide-react';
 import { useSync } from '../../hooks/useSync';
 import { SideNavBar } from './SideNavBar';
 import { isDevMode, setDevMode } from '../../db';
 import { DevModeBanner } from '../dev/DevModeBanner';
 
-export type TabId = 'pos' | 'inventory' | 'stock' | 'cash-shifts' | 'cash' | 'reports';
+export type TabId = 'pos' | 'inventory' | 'stock' | 'debts' | 'cash-shifts' | 'cash' | 'reports';
 
 interface AppShellProps {
   activeTab: TabId;
@@ -69,6 +70,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     { id: 'pos' as TabId, label: 'Venta Rápida', icon: ShoppingCart },
     { id: 'inventory' as TabId, label: 'Inventario', icon: Package },
     { id: 'stock' as TabId, label: 'Entradas', icon: ArrowDownToLine },
+    { id: 'debts' as TabId, label: 'Fiados', icon: HandCoins },
     { id: 'cash-shifts' as TabId, label: 'Caja y turnos', icon: ReceiptText },
     { id: 'cash' as TabId, label: 'Cajas', icon: Wallet },
     { id: 'reports' as TabId, label: 'Caja & Reportes', icon: BarChart3 }
@@ -121,7 +123,9 @@ export const AppShell: React.FC<AppShellProps> = ({
       default:
         return {
           icon: <Wifi size={14} />,
-          label: lastSyncedAt ? `Sincronizado (${lastSyncedAt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })})` : 'Nube Conectada',
+          label: lastSyncedAt
+            ? `Sincronizado (${lastSyncedAt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })})`
+            : 'Nube Conectada',
           bg: 'var(--color-success-bg)',
           color: 'var(--color-success)',
           border: 'var(--color-success-border)'
@@ -166,7 +170,8 @@ export const AppShell: React.FC<AppShellProps> = ({
             {!devActive ? (
               <button
                 onClick={() => {
-                  const msg = '¿Deseas activar el Modo Desarrollador (Sandbox)?\n\nSe cargará una base de datos de prueba aislada y se desconectará la nube de Supabase para que ninguna venta o cambio de prueba afecte a los clientes.';
+                  const msg =
+                    '¿Deseas activar el Modo Desarrollador (Sandbox)?\n\nSe cargará una base de datos de prueba aislada y se desconectará la nube de Supabase para que ninguna venta o cambio de prueba afecte a los clientes.';
                   if (window.confirm(msg)) setDevMode(true);
                 }}
                 style={{
@@ -289,9 +294,9 @@ export const AppShell: React.FC<AppShellProps> = ({
                   if (status === 'unconfigured') {
                     alert(
                       'Para activar la sincronización en Vercel necesitas agregar las variables de entorno de Supabase:\n\n' +
-                      '1. Ve a tu proyecto en vercel.com > Settings > Environment Variables\n' +
-                      '2. Agrega VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY con tus credenciales de Supabase\n' +
-                      '3. Realiza un Redeploy para aplicar los cambios.'
+                        '1. Ve a tu proyecto en vercel.com > Settings > Environment Variables\n' +
+                        '2. Agrega VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY con tus credenciales de Supabase\n' +
+                        '3. Realiza un Redeploy para aplicar los cambios.'
                     );
                     return;
                   }
@@ -325,18 +330,18 @@ export const AppShell: React.FC<AppShellProps> = ({
             </div>
           </header>
 
-        {/* Dynamic Page Content */}
-        <main
-          style={{
-            flex: 1,
-            padding: '20px',
-            overflowY: 'auto',
-            paddingBottom: '80px'
-          }}
-        >
-          {children}
-        </main>
-      </div>
+          {/* Dynamic Page Content */}
+          <main
+            style={{
+              flex: 1,
+              padding: '20px',
+              overflowY: 'auto',
+              paddingBottom: '80px'
+            }}
+          >
+            {children}
+          </main>
+        </div>
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
@@ -357,7 +362,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         }}
         className="mobile-bottom-nav"
       >
-        {navItems.map(item => {
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
@@ -370,16 +375,16 @@ export const AppShell: React.FC<AppShellProps> = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '4px',
-                padding: '6px 12px',
+                padding: '6px 8px',
                 borderRadius: 'var(--radius-md)',
                 color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)',
                 fontWeight: isActive ? 700 : 500,
-                fontSize: '11px',
+                fontSize: '10.5px',
                 flex: 1,
                 minHeight: '48px'
               }}
             >
-              <Icon size={22} color={isActive ? 'var(--brand-primary)' : 'var(--text-muted)'} />
+              <Icon size={20} color={isActive ? 'var(--brand-primary)' : 'var(--text-muted)'} />
               <span>{item.label}</span>
             </button>
           );

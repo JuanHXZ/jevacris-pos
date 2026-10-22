@@ -1,6 +1,6 @@
 import { db, isDevMode } from '../db';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import type { Sale, SaleItem } from '../types';
+import type { Sale, SaleItem, Debt, DebtItem, DebtPayment } from '../types';
 import { PRINCIPAL_CASH_REGISTER_ID } from '../types';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline' | 'error' | 'dev_mode' | 'unconfigured';
@@ -87,7 +87,9 @@ class SyncEngine {
       await this.syncExpenses();
       await this.syncCategories();
       await this.syncProducts();
+      await this.syncDebts();
       await this.syncSales();
+      await this.syncDebtPayments();
       await this.syncStockEntries();
       await this.syncExternalEarnings();
 
@@ -218,6 +220,8 @@ class SyncEngine {
           amount_received: sale.amountReceived,
           change_given: sale.changeGiven,
           cash_session_id: sale.cashSessionId || null,
+          debt_id: sale.debtId || null,
+          debt_payment_id: sale.debtPaymentId || null,
           notes: sale.notes || null,
           created_at: sale.createdAt,
           updated_at: sale.updatedAt
@@ -261,6 +265,8 @@ class SyncEngine {
             amountReceived: row.amount_received,
             changeGiven: row.change_given,
             cashSessionId: row.cash_session_id || undefined,
+            debtId: row.debt_id || undefined,
+            debtPaymentId: row.debt_payment_id || undefined,
             notes: row.notes,
             createdAt: row.created_at,
             updatedAt: row.updated_at,
@@ -287,6 +293,156 @@ class SyncEngine {
               await db.saleItems.put(item);
             }
           }
+        }
+      }
+    }
+  }
+
+  private async syncDebts() {
+    if (!supabase) return;
+
+    const unsyncedDebts = await db.debts.filter(d => !d.synced).toArray();
+    if (unsyncedDebts.length > 0) {
+      for (const debt of unsyncedDebts) {
+        const items = await db.debtItems.where('debtId').equals(debt.id).toArray();
+
+        const { error: debtError } = await supabase.from('debts').upsert({
+          id: debt.id,
+          folio: debt.folio,
+          debtor_name: debt.debtorName,
+          debtor_phone: debt.debtorPhone || null,
+          total_amount: debt.totalAmount,
+          total_profit: debt.totalProfit,
+          paid_amount: debt.paidAmount,
+          remaining_amount: debt.remainingAmount,
+          status: debt.status,
+          due_date: debt.dueDate || null,
+          notes: debt.notes || null,
+          cash_session_id: debt.cashSessionId || null,
+          paid_at: debt.paidAt || null,
+          created_at: debt.createdAt,
+          updated_at: debt.updatedAt
+        });
+
+        if (!debtError && items.length > 0) {
+          const itemsPayload = items.map(item => ({
+            id: item.id,
+            debt_id: item.debtId,
+            product_id: item.productId,
+            product_name: item.productName,
+            product_type: item.productType,
+            unit: item.unit,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            unit_cost: item.unitCost,
+            subtotal: item.subtotal,
+            profit: item.profit,
+            cash_register_id: item.cashRegisterId || null,
+            created_at: item.createdAt
+          }));
+          await supabase.from('debt_items').upsert(itemsPayload);
+        }
+
+        if (!debtError) {
+          await db.debts.update(debt.id, { synced: true });
+        }
+      }
+    }
+
+    const { data: cloudDebts, error } = await supabase.from('debts').select('*, debt_items(*)');
+    if (!error && cloudDebts) {
+      for (const row of cloudDebts) {
+        const local = await db.debts.get(row.id);
+        if (!local || new Date(row.updated_at) > new Date(local.updatedAt)) {
+          const debt: Debt = {
+            id: row.id,
+            folio: row.folio,
+            debtorName: row.debtor_name,
+            debtorPhone: row.debtor_phone || undefined,
+            totalAmount: row.total_amount,
+            totalProfit: row.total_profit ?? 0,
+            paidAmount: row.paid_amount,
+            remainingAmount: row.remaining_amount,
+            status: row.status,
+            dueDate: row.due_date || undefined,
+            notes: row.notes || undefined,
+            cashSessionId: row.cash_session_id || undefined,
+            paidAt: row.paid_at || undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            synced: true
+          };
+          await db.debts.put(debt);
+
+          if (row.debt_items && Array.isArray(row.debt_items)) {
+            for (const itemRow of row.debt_items) {
+              const item: DebtItem = {
+                id: itemRow.id,
+                debtId: itemRow.debt_id,
+                productId: itemRow.product_id,
+                productName: itemRow.product_name,
+                productType: itemRow.product_type,
+                unit: itemRow.unit || 'unidad',
+                quantity: itemRow.quantity,
+                unitPrice: itemRow.unit_price,
+                unitCost: itemRow.unit_cost,
+                subtotal: itemRow.subtotal,
+                profit: itemRow.profit,
+                cashRegisterId: itemRow.cash_register_id || PRINCIPAL_CASH_REGISTER_ID,
+                createdAt: itemRow.created_at
+              };
+              await db.debtItems.put(item);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private async syncDebtPayments() {
+    if (!supabase) return;
+
+    const unsynced = await db.debtPayments.filter(p => !p.synced).toArray();
+    if (unsynced.length > 0) {
+      const payload = unsynced.map(p => ({
+        id: p.id,
+        debt_id: p.debtId,
+        amount: p.amount,
+        payment_method: p.paymentMethod,
+        paid_at: p.paidAt,
+        cash_session_id: p.cashSessionId || null,
+        generated_sale_id: p.generatedSaleId || null,
+        notes: p.notes || null,
+        created_at: p.createdAt,
+        updated_at: p.updatedAt
+      }));
+      const { error } = await supabase.from('debt_payments').upsert(payload);
+      if (!error) {
+        for (const item of unsynced) {
+          await db.debtPayments.update(item.id, { synced: true });
+        }
+      }
+    }
+
+    const { data: cloudData, error } = await supabase.from('debt_payments').select('*');
+    if (!error && cloudData) {
+      for (const row of cloudData) {
+        const local = await db.debtPayments.get(row.id);
+        if (!local) {
+          const payment: DebtPayment = {
+            id: row.id,
+            debtId: row.debt_id,
+            amount: row.amount,
+            paymentMethod: row.payment_method,
+            paidAt: row.paid_at,
+            cashSessionId: row.cash_session_id || undefined,
+            generatedSaleId: row.generated_sale_id || undefined,
+            notes: row.notes || undefined,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            synced: true
+          };
+          await db.debtPayments.put(payment);
         }
       }
     }

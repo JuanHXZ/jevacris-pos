@@ -119,7 +119,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Exportar Reporte de Operación"
-      subtitle="Descarga el balance de ventas, ganancias, arqueos y cajas en formato Excel o PDF"
+      subtitle="Descarga el balance de ventas, ganancias, arqueos, cajas y fiados en formato Excel o PDF"
       maxWidth="640px"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -297,7 +297,15 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
             gap: '16px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '8px'
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Sparkles size={16} color="#7a4c8c" />
               <span
@@ -338,7 +346,14 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                     border: '1px solid #f2ecf7'
                   }}
                 >
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#7e747f', textTransform: 'uppercase' }}>
+                  <div
+                    style={{
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      color: '#7e747f',
+                      textTransform: 'uppercase'
+                    }}
+                  >
                     Ventas Totales
                   </div>
                   <div
@@ -362,7 +377,14 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                     border: '1px solid #f2ecf7'
                   }}
                 >
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#7e747f', textTransform: 'uppercase' }}>
+                  <div
+                    style={{
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      color: '#7e747f',
+                      textTransform: 'uppercase'
+                    }}
+                  >
                     Ganancia Total
                   </div>
                   <div
@@ -386,8 +408,15 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                     border: '1px solid #f2ecf7'
                   }}
                 >
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#7e747f', textTransform: 'uppercase' }}>
-                    Transacciones
+                  <div
+                    style={{
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      color: '#995c00',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Fiados (Salida)
                   </div>
                   <div
                     style={{
@@ -398,7 +427,38 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                       fontVariantNumeric: 'tabular-nums'
                     }}
                   >
-                    {reportData.summary.totalTransactions}
+                    {formatCOP(reportData.summary.debtsGivenAmount || 0)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    backgroundColor: '#ffffff',
+                    padding: '12px 14px',
+                    borderRadius: '18px',
+                    border: '1px solid #f2ecf7'
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '10.5px',
+                      fontWeight: 700,
+                      color: '#310344',
+                      textTransform: 'uppercase'
+                    }}
+                  >
+                    Cartera por Cobrar
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '19px',
+                      fontWeight: 700,
+                      color: '#310344',
+                      marginTop: '4px',
+                      fontVariantNumeric: 'tabular-nums'
+                    }}
+                  >
+                    {formatCOP(reportData.summary.totalActiveReceivables || 0)}
                   </div>
                 </div>
               </div>
@@ -421,7 +481,8 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                   Transferencias: <strong>{formatCOP(reportData.summary.transferSales)}</strong>
                 </span>
                 <span>
-                  Productos distintos: <strong>{reportData.topProducts.length}</strong>
+                  Abonos Recaudados:{' '}
+                  <strong>{formatCOP(reportData.summary.debtPaymentsCollected || 0)}</strong>
                 </span>
               </div>
             </>
@@ -496,7 +557,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                     {isExporting === 'excel' ? 'Generando Excel...' : 'Descargar Excel (.xlsx)'}
                   </div>
                   <div style={{ fontSize: '11.5px', color: '#eab3fc', marginTop: '2px' }}>
-                    5 hojas: Resumen, Ventas, Días, Productos y Caja
+                    6 hojas: Resumen, Ventas, Días, Productos, Caja y Fiados
                   </div>
                 </div>
               </div>

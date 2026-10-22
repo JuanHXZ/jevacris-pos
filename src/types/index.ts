@@ -52,6 +52,8 @@ export interface Sale {
   amountReceived: number;
   changeGiven: number;
   cashSessionId?: string;
+  debtId?: string;
+  debtPaymentId?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -90,6 +92,84 @@ export interface CartItem {
   subtotal: number;
 }
 
+export type DebtStatus = 'pending' | 'partial' | 'paid';
+
+export interface DebtItem {
+  id: string;
+  debtId: string;
+  productId: string;
+  productName: string;
+  productType: ProductType;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  unitCost: number;
+  subtotal: number;
+  profit: number;
+  cashRegisterId: string;
+  createdAt: string;
+}
+
+export interface DebtPayment {
+  id: string;
+  debtId: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  paidAt: string;
+  cashSessionId?: string;
+  generatedSaleId?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  synced?: boolean;
+}
+
+export interface Debt {
+  id: string;
+  folio: string;
+  debtorName: string;
+  debtorPhone?: string;
+  totalAmount: number;
+  totalProfit: number;
+  paidAmount: number;
+  remainingAmount: number;
+  status: DebtStatus;
+  dueDate?: string; // YYYY-MM-DD
+  notes?: string;
+  cashSessionId?: string;
+  paidAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  synced?: boolean;
+  items?: DebtItem[];
+  payments?: DebtPayment[];
+}
+
+export interface DebtWithDetails extends Debt {
+  items: DebtItem[];
+  payments: DebtPayment[];
+  isOverdue: boolean;
+  daysUntilDue: number | null;
+}
+
+export interface DebtsKpiSummary {
+  totalReceivable: number;
+  activeCount: number;
+  collectedThisMonth: number;
+  settledThisMonthCount: number;
+  overdueCount: number;
+  upcomingDueCount: number;
+  recoveryRate: number;
+}
+
+export interface DebtorQuickFilter {
+  debtorName: string;
+  debtorPhone?: string;
+  activeTicketsCount: number;
+  totalTicketsCount: number;
+  totalPendingAmount: number;
+}
+
 export interface DailySummary {
   totalTransactions: number;
   totalSales: number;
@@ -98,6 +178,16 @@ export interface DailySummary {
   physicalProfit: number;
   externalEarnings: number;
   totalProfit: number;
+  /** Valor total de mercancía/servicios entregados en fiado hoy (control de salida/gasto temporal) */
+  debtsGivenAmount?: number;
+  /** Cantidad de tickets de fiado entregados en el día */
+  debtsGivenCount?: number;
+  /** Saldo pendiente actual de los fiados creados en el día */
+  debtsPendingFromDay?: number;
+  /** Monto recaudado en el día por abonos o liquidación de fiados (ya incluido en totalSales) */
+  debtPaymentsCollected?: number;
+  /** Cartera total pendiente acumulada del negocio */
+  totalActiveReceivables?: number;
 }
 
 export type CashSessionStatus = 'open' | 'closed';
@@ -199,6 +289,8 @@ export interface DailyBreakdownRow {
   physicalProfit: number;
   externalEarnings: number;
   totalProfit: number;
+  debtsGivenAmount?: number;
+  debtPaymentsCollected?: number;
 }
 
 export interface TopProductRow {
@@ -219,6 +311,11 @@ export interface EnrichedPeriodSale extends Sale {
 export interface PeriodSummary extends DailySummary {
   expensesTotal: number;
   netBalance: number;
+  debtsGivenAmount: number;
+  debtsGivenCount: number;
+  debtsPendingFromPeriod: number;
+  debtPaymentsCollected: number;
+  totalActiveReceivables: number;
 }
 
 export interface PeriodReportData {
@@ -232,5 +329,7 @@ export interface PeriodReportData {
   cashSessions: CashSession[];
   expenses: Expense[];
   cashRegisterSummaries: CashRegisterSummary[];
+  debtsInPeriod?: DebtWithDetails[];
+  activeDebts?: DebtWithDetails[];
+  debtPaymentsInPeriod?: Array<DebtPayment & { debtorName: string; folio: string }>;
 }
-

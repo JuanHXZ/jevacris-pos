@@ -9,7 +9,10 @@ import type {
   CashRegister,
   CashRegisterDistributionLine,
   CashSession,
-  Expense
+  Expense,
+  Debt,
+  DebtItem,
+  DebtPayment
 } from '../types';
 import { PRINCIPAL_CASH_REGISTER_ID } from '../types';
 import { ensurePrincipalCashRegister } from './cashBootstrap';
@@ -37,6 +40,9 @@ export class JevacrisDatabase extends Dexie {
   cashRegisterDistributionLines!: EntityTable<CashRegisterDistributionLine, 'id'>;
   cashSessions!: EntityTable<CashSession, 'id'>;
   expenses!: EntityTable<Expense, 'id'>;
+  debts!: EntityTable<Debt, 'id'>;
+  debtItems!: EntityTable<DebtItem, 'id'>;
+  debtPayments!: EntityTable<DebtPayment, 'id'>;
 
   constructor(dbName = isDevMode() ? 'jevacris_pos_dev_db' : 'jevacris_pos_db') {
     super(dbName);
@@ -68,6 +74,23 @@ export class JevacrisDatabase extends Dexie {
           cashRegisterDistributionLines: trans.table('cashRegisterDistributionLines'),
           products: trans.table('products')
         });
+      });
+
+    this.version(22)
+      .stores({
+        categories: 'id, name, createdAt, updatedAt, synced',
+        products: 'id, name, categoryId, type, cashRegisterId, currentStock, minStockAlert, isActive, createdAt, updatedAt, synced',
+        sales: 'id, saleDate, paymentMethod, cashSessionId, debtId, debtPaymentId, createdAt, updatedAt, synced',
+        saleItems: 'id, saleId, productId, productType, cashRegisterId, createdAt',
+        stockEntries: 'id, productId, entryDate, createdAt, updatedAt, synced',
+        externalEarnings: 'id, earningDate, platformName, createdAt, updatedAt, synced',
+        cashRegisters: 'id, name, isPrincipal, isActive, createdAt, updatedAt, synced',
+        cashRegisterDistributionLines: 'id, cashRegisterId, sortOrder, createdAt, updatedAt, synced',
+        cashSessions: 'id, status, openedAt, closedAt, createdAt, updatedAt, synced',
+        expenses: 'id, cashSessionId, category, expenseDate, createdAt, updatedAt, synced',
+        debts: 'id, folio, debtorName, status, dueDate, cashSessionId, createdAt, updatedAt, synced',
+        debtItems: 'id, debtId, productId, productType, cashRegisterId, createdAt',
+        debtPayments: 'id, debtId, paymentMethod, paidAt, cashSessionId, generatedSaleId, createdAt, updatedAt, synced'
       });
   }
 }
