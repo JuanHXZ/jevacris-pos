@@ -13,7 +13,8 @@ import {
   Sparkles,
   X,
   SlidersHorizontal,
-  HandCoins
+  HandCoins,
+  AlertTriangle
 } from 'lucide-react';
 import { db } from '../../db';
 import { salesRepository, NoOpenSessionError } from '../../repositories/salesRepository';
@@ -71,6 +72,9 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
   const [fractionalModalOpen, setFractionalModalOpen] = useState(false);
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [newDebtModalOpen, setNewDebtModalOpen] = useState(false);
+  const [confirmSaleModalOpen, setConfirmSaleModalOpen] = useState(false);
+  const [confirmCancelStep, setConfirmCancelStep] = useState(false);
+  const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [selectedBulkProduct, setSelectedBulkProduct] = useState<Product | null>(null);
   const [fractionalMode, setFractionalMode] = useState<'money' | 'quantity'>('money');
   const [moneyAmountRaw, setMoneyAmountRaw] = useState<string>('2000');
@@ -198,7 +202,25 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
     setAmountReceivedRaw('');
   };
 
-  const handleConfirmSale = async () => {
+  const handleConfirmSale = () => {
+    if (cart.length === 0) return;
+    if (!hasOpenSession) {
+      setSessionModalOpen(true);
+      return;
+    }
+    setConfirmCancelStep(false);
+    setConfirmSaleModalOpen(true);
+  };
+
+  const handleCancelSaleConfirmed = () => {
+    clearCart();
+    setConfirmCancelStep(false);
+    setConfirmSaleModalOpen(false);
+  };
+
+  const executeConfirmedSale = async () => {
+    if (cart.length === 0 || isProcessingSale) return;
+    setIsProcessingSale(true);
     if (cart.length === 0) return;
     if (!hasOpenSession) {
       setSessionModalOpen(true);
@@ -214,6 +236,8 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
       });
 
       const change = paymentMethod === 'cash' ? Math.max(0, receivedVal - cartTotal) : 0;
+      setConfirmSaleModalOpen(false);
+      setConfirmCancelStep(false);
       setSuccessToast({ total: cartTotal, change });
       clearCart();
 
@@ -227,6 +251,8 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
         return;
       }
       alert(error instanceof Error ? error.message : 'Error al registrar la venta');
+    } finally {
+      setIsProcessingSale(false);
     }
   };
 
@@ -1509,6 +1535,380 @@ export const PosView: React.FC<PosViewProps> = ({ onGoToCashShifts }) => {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* ========================================================================= */}
+      {/* Modal de Confirmación de Venta (Prevención de Ventas Duplicadas)          */}
+      {/* ========================================================================= */}
+      <Modal
+        isOpen={confirmSaleModalOpen}
+        onClose={() => {
+          if (!isProcessingSale) {
+            setConfirmCancelStep(false);
+            setConfirmSaleModalOpen(false);
+          }
+        }}
+        title="Confirmar Registro de Venta"
+        subtitle="Verifica el detalle de productos y el medio de pago antes de registrar la venta"
+        maxWidth="560px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Resumen Financiero y Medio de Pago */}
+          <div
+            style={{
+              backgroundColor: '#f8f1fd',
+              borderRadius: '24px',
+              padding: '18px 20px',
+              border: '1px solid rgba(207, 195, 207, 0.45)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingBottom: '12px',
+                borderBottom: '1px solid #e6e0eb'
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    color: '#6d5773',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em'
+                  }}
+                >
+                  Medio de Pago Seleccionado
+                </span>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginTop: '6px',
+                    padding: '6px 14px',
+                    borderRadius: '9999px',
+                    backgroundColor: '#310344',
+                    color: '#f6d9fb',
+                    fontSize: '13px',
+                    fontWeight: 700
+                  }}
+                >
+                  {paymentMethod === 'cash' ? (
+                    <>
+                      <Banknote size={15} />
+                      <span>Efectivo</span>
+                    </>
+                  ) : (
+                    <>
+                      <Smartphone size={15} />
+                      <span>Nequi / Transferencia</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
+                <span
+                  style={{
+                    display: 'block',
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    color: '#6d5773',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em'
+                  }}
+                >
+                  Total a Cobrar
+                </span>
+                <span
+                  style={{
+                    fontSize: '30px',
+                    fontWeight: 800,
+                    color: '#310344',
+                    letterSpacing: '-0.8px',
+                    fontVariantNumeric: 'tabular-nums'
+                  }}
+                >
+                  {formatCOP(cartTotal)}
+                </span>
+              </div>
+            </div>
+
+            {paymentMethod === 'cash' && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '13.5px',
+                  color: '#4d444e'
+                }}
+              >
+                <span>
+                  Efectivo recibido:{' '}
+                  <strong style={{ color: '#1d1a22' }}>{formatCOP(numReceived || cartTotal)}</strong>
+                </span>
+                <span>
+                  Vueltas / Cambio:{' '}
+                  <strong style={{ color: changeGiven > 0 ? '#1e7e34' : '#310344', fontSize: '15px' }}>
+                    {formatCOP(changeGiven)}
+                  </strong>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Desglose de Productos del Carrito */}
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '8px'
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: '#4d444e',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em'
+                }}
+              >
+                Detalle de Productos ({cart.length} {cart.length === 1 ? 'ítem' : 'ítems'})
+              </span>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: '20px',
+                border: '1px solid #e6e0eb',
+                padding: '12px 14px',
+                maxHeight: '220px',
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px'
+              }}
+            >
+              {cart.map((item) => (
+                <div
+                  key={item.product.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    paddingBottom: '8px',
+                    borderBottom: '1px solid #f2ecf7'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <span
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '8px',
+                        backgroundColor: '#f8f1fd',
+                        border: '1px solid rgba(207, 195, 207, 0.5)',
+                        color: '#310344',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        flexShrink: 0
+                      }}
+                    >
+                      {item.quantity} {item.product.unit}
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: '13.5px',
+                          fontWeight: 600,
+                          color: '#1d1a22',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {item.product.name}
+                      </div>
+                      <div style={{ fontSize: '11.5px', color: '#7e747f' }}>
+                        {formatCOP(item.customPrice ?? item.product.salePrice)} c/u
+                      </div>
+                    </div>
+                  </div>
+
+                  <span
+                    style={{
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      color: '#010001',
+                      fontVariantNumeric: 'tabular-nums',
+                      flexShrink: 0
+                    }}
+                  >
+                    {formatCOP(item.subtotal)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Paso de Doble Confirmación para Cancelar la Venta y Vaciar Carrito */}
+          {confirmCancelStep ? (
+            <div
+              style={{
+                backgroundColor: '#ffdad6',
+                border: '1.5px solid rgba(186, 26, 26, 0.35)',
+                borderRadius: '22px',
+                padding: '18px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '12px',
+                    backgroundColor: '#ffffff',
+                    color: '#ba1a1a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}
+                >
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '14.5px', fontWeight: 800, color: '#93000a' }}>
+                    ¿Confirmas que deseas cancelar la venta?
+                  </div>
+                  <div style={{ fontSize: '12.5px', color: '#93000a', marginTop: '3px', lineHeight: 1.4 }}>
+                    Al confirmar la cancelación se descartará esta operación y{' '}
+                    <strong>se limpiarán todos los productos del carrito</strong>.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancelStep(false)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '9999px',
+                    border: '1px solid #cfc3cf',
+                    backgroundColor: '#ffffff',
+                    color: '#1d1a22',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  No, volver al resumen
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCancelSaleConfirmed}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '9999px',
+                    border: 'none',
+                    backgroundColor: '#ba1a1a',
+                    color: '#ffffff',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 12px rgba(186, 26, 26, 0.25)'
+                  }}
+                >
+                  <Trash2 size={14} />
+                  <span>Sí, cancelar venta y limpiar carrito</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Botones Principales: Cancelar Venta vs. Realizar Venta */
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                paddingTop: '8px',
+                borderTop: '1px solid #ece6f1',
+                flexWrap: 'wrap'
+              }}
+            >
+              <button
+                type="button"
+                disabled={isProcessingSale}
+                onClick={() => setConfirmCancelStep(true)}
+                style={{
+                  padding: '13px 20px',
+                  borderRadius: '9999px',
+                  border: '1.5px solid rgba(186, 26, 26, 0.35)',
+                  backgroundColor: '#fff5f4',
+                  color: '#ba1a1a',
+                  fontSize: '13.5px',
+                  fontWeight: 700,
+                  cursor: isProcessingSale ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '7px'
+                }}
+              >
+                <Trash2 size={15} />
+                <span>Cancelar Venta</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isProcessingSale}
+                onClick={executeConfirmedSale}
+                style={{
+                  flex: 1,
+                  minWidth: '210px',
+                  padding: '14px 28px',
+                  borderRadius: '9999px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #310344 0%, #010001 100%)',
+                  color: '#ffffff',
+                  fontSize: '15px',
+                  fontWeight: 700,
+                  cursor: isProcessingSale ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 8px 20px rgba(49, 3, 68, 0.25)',
+                  opacity: isProcessingSale ? 0.7 : 1
+                }}
+              >
+                <CheckCircle2 size={18} color="#f6d9fb" />
+                <span>{isProcessingSale ? 'Registrando Venta...' : 'Realizar Venta'}</span>
+              </button>
+            </div>
+          )}
+        </div>
       </Modal>
 
       {/* Modal para Registrar Fiado directamente desde el Carrito POS */}
